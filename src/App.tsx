@@ -184,7 +184,14 @@ export default function App() {
     }
  
     const alunosSnap = await getDocs(qAlunos);
-    const listaAlunos = alunosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const listaAlunos = alunosSnap.docs.map((d) => {
+      const dados = d.data() as any;
+    
+      return {
+        id: d.id,
+        ...dados,
+      };
+    });
     setAlunos(listaAlunos);
  
     const treinosRef = collection(db, "treinos");
