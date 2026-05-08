@@ -103,6 +103,7 @@ export default function App() {
   const [timerInfo, setTimerInfo] = useState("Descanso");
  
   const [dragExercicioId, setDragExercicioId] = useState("");
+  const [abaProfessor, setAbaProfessor] = useState<"treinos" | "alunos">("treinos");
  
   useEffect(() => {
     const on = () => setOnline(true);
@@ -200,7 +201,14 @@ export default function App() {
       : query(treinosRef, where("alunoEmail", "==", usuario.email));
  
     const treinosSnap = await getDocs(qTreinos);
-    const listaTreinos = treinosSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Treino));
+    const listaTreinos = treinosSnap.docs.map((d) => {
+      const dados = d.data() as any;
+
+      return {
+        id: d.id,
+        ...dados,
+      } as Treino;
+    });
     setTreinos(listaTreinos);
  
     if (!treinoAbertoId && listaTreinos[0]) setTreinoAbertoId(listaTreinos[0].id);
@@ -277,6 +285,88 @@ export default function App() {
     setNovoAlunoEmail("");
     setNovoAlunoFoto("");
     carregarTudo();
+  }
+
+ 
+  async function excluirAluno(aluno: any) {
+    const confirmar = confirm(
+      `Deseja excluir o aluno ${aluno.nome}? Os treinos dele também serão excluídos.`
+    );
+
+    if (!confirmar) return;
+
+    try {
+      await deleteDoc(doc(db, "alunos", aluno.id));
+
+      const qTreinosAluno = query(
+        collection(db, "treinos"),
+        where("professorEmail", "==", usuario.email),
+        where("alunoEmail", "==", aluno.email)
+      );
+
+      const snap = await getDocs(qTreinosAluno);
+
+      await Promise.all(
+        snap.docs.map((documento) =>
+          deleteDoc(doc(db, "treinos", documento.id))
+        )
+      );
+
+      if (alunoSelecionado === aluno.id) {
+        setAlunoSelecionado("");
+        setTreinoAbertoId("");
+      }
+
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao excluir aluno.");
+    }
+  }
+
+  async function zerarDadosProfessor() {
+    const confirmacao = prompt(
+      'Isso vai apagar TODOS os alunos e TODOS os treinos deste professor. Digite ZERAR para confirmar.'
+    );
+
+    if (confirmacao !== "ZERAR") return;
+
+    try {
+      const qAlunosProfessor = query(
+        collection(db, "alunos"),
+        where("professorEmail", "==", usuario.email)
+      );
+
+      const qTreinosProfessor = query(
+        collection(db, "treinos"),
+        where("professorEmail", "==", usuario.email)
+      );
+
+      const [alunosSnap, treinosSnap] = await Promise.all([
+        getDocs(qAlunosProfessor),
+        getDocs(qTreinosProfessor),
+      ]);
+
+      await Promise.all([
+        ...alunosSnap.docs.map((documento) =>
+          deleteDoc(doc(db, "alunos", documento.id))
+        ),
+        ...treinosSnap.docs.map((documento) =>
+          deleteDoc(doc(db, "treinos", documento.id))
+        ),
+      ]);
+
+      setAlunos([]);
+      setTreinos([]);
+      setAlunoSelecionado("");
+      setTreinoAbertoId("");
+
+      alert("Banco zerado para este professor.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao zerar o banco de dados.");
+    }
   }
  
   async function criarTreino() {
@@ -479,7 +569,80 @@ export default function App() {
     carregarTudo();
   }
 
-  const treinosOrdenados = useMemo(() => [...treinos].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")), [treinos]);
+
+  function progressoAluno(aluno: any) {
+    const treinosAluno = treinos.filter(
+      (treino) =>
+        treino.alunoId === aluno.id ||
+        treino.alunoEmail === aluno.email
+    );
+
+    const totalExercicios = treinosAluno.reduce(
+      (total, treino) => total + (treino.exercicios?.length || 0),
+      0
+    );
+
+    const concluidos = treinosAluno.reduce(
+      (total, treino) =>
+        total +
+        (treino.exercicios || []).filter((exercicio) => exercicio.finalizado)
+          .length,
+      0
+    );
+
+    const progresso = totalExercicios
+      ? Math.round((concluidos / totalExercicios) * 100)
+      : 0;
+
+    return {
+      treinos: treinosAluno.length,
+      totalExercicios,
+      concluidos,
+      progresso,
+    };
+  }
+
+  const alunoSelecionadoObj = useMemo(
+    () => alunos.find((aluno) => aluno.id === alunoSelecionado),
+    [alunos, alunoSelecionado]
+  );
+
+  const treinosVisiveis = useMemo(() => {
+    if (perfil?.tipo === "professor") {
+      if (!alunoSelecionadoObj) return [];
+
+      return treinos.filter(
+        (treino) =>
+          treino.alunoId === alunoSelecionadoObj.id ||
+          treino.alunoEmail === alunoSelecionadoObj.email
+      );
+    }
+
+    return treinos;
+  }, [treinos, perfil, alunoSelecionadoObj]);
+
+  const treinosOrdenados = useMemo(
+    () =>
+      [...treinosVisiveis].sort((a, b) =>
+        (a.nome || "").localeCompare(b.nome || "")
+      ),
+    [treinosVisiveis]
+  );
+
+  useEffect(() => {
+    if (treinosOrdenados.length === 0) {
+      setTreinoAbertoId("");
+      return;
+    }
+
+    const existeTreinoAberto = treinosOrdenados.some(
+      (treino) => treino.id === treinoAbertoId
+    );
+
+    if (!existeTreinoAberto) {
+      setTreinoAbertoId(treinosOrdenados[0].id);
+    }
+  }, [treinosOrdenados, treinoAbertoId]);
  
   if (!usuario) {
     return (
@@ -579,7 +742,14 @@ export default function App() {
  
           <Card>
             <h2>Criar treino</h2>
-            <select style={styles.input} value={alunoSelecionado} onChange={(e) => setAlunoSelecionado(e.target.value)}>
+            <select
+              style={styles.input}
+              value={alunoSelecionado}
+              onChange={(e) => {
+                setAlunoSelecionado(e.target.value);
+                setTreinoAbertoId("");
+              }}
+            >
               <option value="">Selecione o aluno</option>
               {alunos.map((a) => <option key={a.id} value={a.id}>{a.nome} - {a.email}</option>)}
             </select>
@@ -595,8 +765,108 @@ export default function App() {
           </Card>
         </div>
       )}
- 
-      <h2 style={{ color: "white" }}>Treinos</h2>
+
+      {perfil?.tipo === "professor" && (
+        <div style={styles.professorTabs}>
+          <button
+            style={abaProfessor === "treinos" ? styles.tabAtiva : styles.tab}
+            onClick={() => setAbaProfessor("treinos")}
+          >
+            Treinos
+          </button>
+
+          <button
+            style={abaProfessor === "alunos" ? styles.tabAtiva : styles.tab}
+            onClick={() => setAbaProfessor("alunos")}
+          >
+            Gerenciar alunos
+          </button>
+        </div>
+      )}
+
+      {perfil?.tipo === "professor" && abaProfessor === "alunos" && (
+        <Card>
+          <div style={styles.treinoHeader}>
+            <div>
+              <h2>Gerenciar alunos</h2>
+              <p>Excluir alunos e acompanhar o progresso geral de cada um.</p>
+            </div>
+
+            <button style={styles.danger} onClick={zerarDadosProfessor}>
+              Zerar banco deste professor
+            </button>
+          </div>
+
+          {alunos.length === 0 && <p>Nenhum aluno cadastrado.</p>}
+
+          <div style={styles.alunoGrid}>
+            {alunos.map((aluno) => {
+              const resumo = progressoAluno(aluno);
+
+              return (
+                <div key={aluno.id} style={styles.alunoCardGerenciar}>
+                  <div style={styles.alunoLinhaTopo}>
+                    <div style={styles.alunoInfoLinha}>
+                      {aluno.foto && (
+                        <img
+                          src={aluno.foto}
+                          alt={aluno.nome}
+                          style={styles.alunoFotoMini}
+                        />
+                      )}
+
+                      <div>
+                        <h3 style={{ margin: 0 }}>{aluno.nome}</h3>
+                        <small>{aluno.email}</small>
+                      </div>
+                    </div>
+
+                    <button
+                      style={styles.danger}
+                      onClick={() => excluirAluno(aluno)}
+                    >
+                      Excluir aluno
+                    </button>
+                  </div>
+
+                  <p><b>Treinos:</b> {resumo.treinos}</p>
+                  <p><b>Exercícios:</b> {resumo.concluidos}/{resumo.totalExercicios}</p>
+                  <ProgressBar value={resumo.progresso} />
+
+                  <button
+                    style={styles.primary}
+                    onClick={() => {
+                      setAlunoSelecionado(aluno.id);
+                      setAbaProfessor("treinos");
+                      setTreinoAbertoId("");
+                    }}
+                  >
+                    Ver treinos deste aluno
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {(perfil?.tipo !== "professor" || abaProfessor === "treinos") && (
+        <>
+      <h2 style={{ color: "white" }}>
+        {perfil?.tipo === "professor" && alunoSelecionadoObj
+          ? `Treinos de ${alunoSelecionadoObj.nome}`
+          : "Treinos"}
+      </h2>
+
+      {perfil?.tipo === "professor" && !alunoSelecionadoObj && (
+        <Card>
+          <h3>Selecione um aluno</h3>
+          <p>
+            Escolha um aluno no campo acima para ver somente os treinos dele.
+            Assim os treinos ficam separados e organizados por aluno.
+          </p>
+        </Card>
+      )}
       <div style={styles.treinoTabs}>
         {treinosOrdenados.map((t) => {
           const progresso = calcularProgresso(t);
@@ -712,6 +982,8 @@ export default function App() {
           </Card>
         );
       })}
+        </>
+      )}
     </Page>
   );
 }
@@ -815,8 +1087,8 @@ const styles: any = {
   input: { width: "100%", padding: 10, marginTop: 5, marginBottom: 10, borderRadius: 10, border: "1px solid #cbd5e1", boxSizing: "border-box" },
   label: { fontWeight: "bold", display: "block" },
   primary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "bold" },
-  secondary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#e2e8f0", cursor: "pointer", fontWeight: "bold" },
-  danger: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#fee2e2", color: "#991b1b", cursor: "pointer", fontWeight: "bold" },
+  secondary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "bold", opacity: 1 },
+  danger: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: "bold", opacity: 1 },
   success: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#dcfce7", color: "#166534", cursor: "pointer", fontWeight: "bold" },
   messages: { marginTop: 20, padding: 15, background: "#f1f5f9", borderRadius: 12 },
   progressBg: { width: "100%", height: 12, background: "#e2e8f0", borderRadius: 20, overflow: "hidden", marginTop: 8, marginBottom: 10 },
@@ -824,5 +1096,11 @@ const styles: any = {
   ok: { padding: 10, background: "#dcfce7", color: "#166534", borderRadius: 10, fontWeight: "bold" },
   timerFixo: { position: "sticky", top: 0, zIndex: 10, padding: 12, background: "#0f172a", color: "white", borderRadius: 12, marginBottom: 15, boxShadow: "0 6px 16px rgba(0,0,0,.25)" },
   chartBox: { marginTop: 12, padding: 12, background: "white", borderRadius: 12, border: "1px solid #cbd5e1" },
+  professorTabs: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 15 },
+  alunoGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 14 },
+  alunoCardGerenciar: { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 14, padding: 15 },
+  alunoLinhaTopo: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  alunoInfoLinha: { display: "flex", alignItems: "center", gap: 10 },
+  alunoFotoMini: { width: 55, height: 55, borderRadius: "50%", objectFit: "cover", border: "2px solid #2563eb" },
   fotoPreview: { width: 90, height: 90, borderRadius: "50%", objectFit: "cover", border: "3px solid #2563eb", marginBottom: 10 },
 };
