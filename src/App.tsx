@@ -103,6 +103,9 @@ export default function App() {
   const [timerInfo, setTimerInfo] = useState("Descanso");
  
   const [dragExercicioId, setDragExercicioId] = useState("");
+  const [exercicioAbertoId, setExercicioAbertoId] = useState("");
+  const [novoExercicioDraft, setNovoExercicioDraft] = useState<Exercicio | null>(null);
+  const [abaProfessor, setAbaProfessor] = useState<"treinos" | "alunos">("treinos");
  
   useEffect(() => {
     const on = () => setOnline(true);
@@ -131,8 +134,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(CACHE_TREINOS, JSON.stringify(treinos));
   }, [treinos]);
- 
-  useEffect(() => {
+useEffect(() => {
     if (!timerAtivo) return;
     if (tempoRestante <= 0) {
       setTimerAtivo(false);
@@ -200,7 +202,14 @@ export default function App() {
       : query(treinosRef, where("alunoEmail", "==", usuario.email));
  
     const treinosSnap = await getDocs(qTreinos);
-    const listaTreinos = treinosSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Treino));
+    const listaTreinos = treinosSnap.docs.map((d) => {
+      const dados = d.data() as any;
+
+      return {
+        id: d.id,
+        ...dados,
+      } as Treino;
+    });
     setTreinos(listaTreinos);
  
     if (!treinoAbertoId && listaTreinos[0]) setTreinoAbertoId(listaTreinos[0].id);
@@ -278,6 +287,88 @@ export default function App() {
     setNovoAlunoFoto("");
     carregarTudo();
   }
+
+ 
+  async function excluirAluno(aluno: any) {
+    const confirmar = confirm(
+      `Deseja excluir o aluno ${aluno.nome}? Os treinos dele também serão excluídos.`
+    );
+
+    if (!confirmar) return;
+
+    try {
+      await deleteDoc(doc(db, "alunos", aluno.id));
+
+      const qTreinosAluno = query(
+        collection(db, "treinos"),
+        where("professorEmail", "==", usuario.email),
+        where("alunoEmail", "==", aluno.email)
+      );
+
+      const snap = await getDocs(qTreinosAluno);
+
+      await Promise.all(
+        snap.docs.map((documento) =>
+          deleteDoc(doc(db, "treinos", documento.id))
+        )
+      );
+
+      if (alunoSelecionado === aluno.id) {
+        setAlunoSelecionado("");
+        setTreinoAbertoId("");
+      }
+
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao excluir aluno.");
+    }
+  }
+
+  async function zerarDadosProfessor() {
+    const confirmacao = prompt(
+      'Isso vai apagar TODOS os alunos e TODOS os treinos deste professor. Digite ZERAR para confirmar.'
+    );
+
+    if (confirmacao !== "ZERAR") return;
+
+    try {
+      const qAlunosProfessor = query(
+        collection(db, "alunos"),
+        where("professorEmail", "==", usuario.email)
+      );
+
+      const qTreinosProfessor = query(
+        collection(db, "treinos"),
+        where("professorEmail", "==", usuario.email)
+      );
+
+      const [alunosSnap, treinosSnap] = await Promise.all([
+        getDocs(qAlunosProfessor),
+        getDocs(qTreinosProfessor),
+      ]);
+
+      await Promise.all([
+        ...alunosSnap.docs.map((documento) =>
+          deleteDoc(doc(db, "alunos", documento.id))
+        ),
+        ...treinosSnap.docs.map((documento) =>
+          deleteDoc(doc(db, "treinos", documento.id))
+        ),
+      ]);
+
+      setAlunos([]);
+      setTreinos([]);
+      setAlunoSelecionado("");
+      setTreinoAbertoId("");
+
+      alert("Banco zerado para este professor.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao zerar o banco de dados.");
+    }
+  }
  
   async function criarTreino() {
     if (!alunoSelecionado || !nomeTreino) return alert("Selecione o aluno e informe o nome do treino.");
@@ -308,13 +399,13 @@ export default function App() {
     carregarTudo();
   }
  
-  async function adicionarExercicio(treino: Treino) {
+  function adicionarExercicio( ) {
     const novo: Exercicio = {
       id: uid(),
-      nome: "Novo exercício",
-      series: "4",
-      repeticoes: "10",
-      descanso: "60",
+      nome: "",
+      series: "",
+      repeticoes: "",
+      descanso: "",
       cargaSugerida: "",
       metodo: "",
       velocidade: "",
@@ -325,12 +416,42 @@ export default function App() {
       ultimaCarga: "",
       seriesConcluidas: [],
       finalizado: false,
-      ordem: (treino.exercicios || []).length,
+      ordem: -1,
       historicoCargas: [],
     };
-    await salvarExercicios(treino, [...(treino.exercicios || []), novo]);
+
+    setNovoExercicioDraft(novo);
+    setExercicioAbertoId(novo.id);
   }
- 
+
+  function atualizarNovoExercicio(campo: keyof Exercicio, valor: any) {
+    if (!novoExercicioDraft) return;
+
+    setNovoExercicioDraft({
+      ...novoExercicioDraft,
+      [campo]: valor,
+    });
+  }
+
+  async function salvarNovoExercicio(treino: Treino) {
+    if (!novoExercicioDraft) return;
+
+    if (!novoExercicioDraft.nome.trim()) {
+      alert("Digite o nome do exercício.");
+      return;
+    }
+
+    const novo: Exercicio = {
+      ...novoExercicioDraft,
+      ordem: 0,
+    };
+
+    await salvarExercicios(treino, [novo, ...(treino.exercicios || [])]);
+
+    setNovoExercicioDraft(null);
+    setExercicioAbertoId("");
+  }
+
   async function salvarExercicios(treino: Treino, exercicios: Exercicio[]) {
     const atualizados = exercicios.map((e, index) => ({ ...e, ordem: index }));
     setTreinos((prev) => prev.map((t) => t.id === treino.id ? { ...t, exercicios: atualizados } : t));
@@ -479,7 +600,95 @@ export default function App() {
     carregarTudo();
   }
 
-  const treinosOrdenados = useMemo(() => [...treinos].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")), [treinos]);
+
+  function progressoAluno(aluno: any) {
+    const treinosAluno = treinos.filter(
+      (treino) =>
+        treino.alunoId === aluno.id ||
+        treino.alunoEmail === aluno.email
+    );
+
+    const totalExercicios = treinosAluno.reduce(
+      (total, treino) => total + (treino.exercicios?.length || 0),
+      0
+    );
+
+    const concluidos = treinosAluno.reduce(
+      (total, treino) =>
+        total +
+        (treino.exercicios || []).filter((exercicio) => exercicio.finalizado)
+          .length,
+      0
+    );
+
+    const progresso = totalExercicios
+      ? Math.round((concluidos / totalExercicios) * 100)
+      : 0;
+
+    return {
+      treinos: treinosAluno.length,
+      totalExercicios,
+      concluidos,
+      progresso,
+    };
+  }
+
+  const alunoSelecionadoObj = useMemo(
+    () => alunos.find((a) => a.id === alunoSelecionado),
+    [alunos, alunoSelecionado]
+  );
+
+  const treinosVisiveis = useMemo(() => {
+    if (perfil?.tipo === "professor") {
+      if (!alunoSelecionadoObj) return [];
+
+      return treinos.filter(
+        (treino) =>
+          treino.alunoId === alunoSelecionadoObj.id ||
+          treino.alunoEmail === alunoSelecionadoObj.email
+      );
+    }
+
+    return treinos;
+  }, [treinos, perfil, alunoSelecionadoObj]);
+
+  const treinosOrdenados = useMemo(
+    () =>
+      [...treinosVisiveis].sort((a, b) =>
+        (a.nome || "").localeCompare(b.nome || "")
+      ),
+    [treinosVisiveis]
+  );
+
+  useEffect(() => {
+    const existeTreinoAbertoNaLista = treinosOrdenados.some(
+      (treino) => treino.id === treinoAbertoId
+    );
+
+    if (treinosOrdenados.length === 0) {
+      if (treinoAbertoId) setTreinoAbertoId("");
+      return;
+    }
+
+    if (!treinoAbertoId || !existeTreinoAbertoNaLista) {
+      setTreinoAbertoId(treinosOrdenados[0].id);
+    }
+  }, [treinosOrdenados, treinoAbertoId]);
+
+  useEffect(() => {
+    if (treinosOrdenados.length === 0) {
+      setTreinoAbertoId("");
+      return;
+    }
+
+    const existeTreinoAberto = treinosOrdenados.some(
+      (treino) => treino.id === treinoAbertoId
+    );
+
+    if (!existeTreinoAberto) {
+      setTreinoAbertoId(treinosOrdenados[0].id);
+    }
+  }, [treinosOrdenados, treinoAbertoId]);
  
   if (!usuario) {
     return (
@@ -579,7 +788,14 @@ export default function App() {
  
           <Card>
             <h2>Criar treino</h2>
-            <select style={styles.input} value={alunoSelecionado} onChange={(e) => setAlunoSelecionado(e.target.value)}>
+            <select
+              style={styles.input}
+              value={alunoSelecionado}
+              onChange={(e) => {
+                setAlunoSelecionado(e.target.value);
+                setTreinoAbertoId("");
+              }}
+            >
               <option value="">Selecione o aluno</option>
               {alunos.map((a) => <option key={a.id} value={a.id}>{a.nome} - {a.email}</option>)}
             </select>
@@ -595,8 +811,142 @@ export default function App() {
           </Card>
         </div>
       )}
- 
-      <h2 style={{ color: "white" }}>Treinos</h2>
+
+      {perfil?.tipo === "professor" && (
+        <div style={styles.professorTabs}>
+          <button
+            style={abaProfessor === "treinos" ? styles.tabAtiva : styles.tab}
+            onClick={() => setAbaProfessor("treinos")}
+          >
+            Treinos
+          </button>
+
+          <button
+            style={abaProfessor === "alunos" ? styles.tabAtiva : styles.tab}
+            onClick={() => setAbaProfessor("alunos")}
+          >
+            Gerenciar alunos
+          </button>
+        </div>
+      )}
+
+      {perfil?.tipo === "professor" && abaProfessor === "alunos" && (
+        <Card>
+          <div style={styles.treinoHeader}>
+            <div>
+              <h2>Gerenciar alunos</h2>
+              <p>Excluir alunos e acompanhar o progresso geral de cada um.</p>
+            </div>
+
+            <button style={styles.danger} onClick={zerarDadosProfessor}>
+              Zerar banco deste professor
+            </button>
+          </div>
+
+          {alunos.length === 0 && <p>Nenhum aluno cadastrado.</p>}
+
+          <div style={styles.alunoGrid}>
+            {alunos.map((aluno) => {
+              const resumo = progressoAluno(aluno);
+
+              return (
+                <div key={aluno.id} style={styles.alunoCardGerenciar}>
+                  <div style={styles.alunoLinhaTopo}>
+                    <div style={styles.alunoInfoLinha}>
+                      {aluno.foto && (
+                        <img
+                          src={aluno.foto}
+                          alt={aluno.nome}
+                          style={styles.alunoFotoMini}
+                        />
+                      )}
+
+                      <div>
+                        <h3 style={{ margin: 0 }}>{aluno.nome}</h3>
+                        <small>{aluno.email}</small>
+                      </div>
+                    </div>
+
+                    <button
+                      style={styles.danger}
+                      onClick={() => excluirAluno(aluno)}
+                    >
+                      Excluir aluno
+                    </button>
+                  </div>
+
+                  <p><b>Treinos:</b> {resumo.treinos}</p>
+                  <p><b>Exercícios:</b> {resumo.concluidos}/{resumo.totalExercicios}</p>
+                  <ProgressBar value={resumo.progresso} />
+
+                  <button
+                    style={styles.primary}
+                    onClick={() => {
+                      setAlunoSelecionado(aluno.id);
+                      setAbaProfessor("treinos");
+                      setTreinoAbertoId("");
+                    }}
+                  >
+                    Ver treinos deste aluno
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {(perfil?.tipo !== "professor" || abaProfessor === "treinos") && (
+        <>
+      {perfil?.tipo === "professor" && (
+        <Card>
+          <h2>Selecionar aluno</h2>
+          <p>
+            Escolha um aluno abaixo. Depois disso, aparecerão somente os treinos
+            direcionados para ele.
+          </p>
+
+          <select
+            style={styles.input}
+            value={alunoSelecionado}
+            onChange={(e) => {
+              setAlunoSelecionado(e.target.value);
+              setTreinoAbertoId("");
+            }}
+          >
+            <option value="">Selecione um aluno</option>
+            {alunos.map((aluno) => (
+              <option key={aluno.id} value={aluno.id}>
+                {aluno.nome} - {aluno.email}
+              </option>
+            ))}
+          </select>
+
+          {alunoSelecionadoObj && (
+            <div style={styles.alunoSelecionadoBox}>
+              <b>Aluno selecionado:</b> {alunoSelecionadoObj.nome}
+              <br />
+              <small>{alunoSelecionadoObj.email}</small>
+            </div>
+          )}
+        </Card>
+      )}
+
+      <h2 style={{ color: "white" }}>
+        {perfil?.tipo === "professor" && alunoSelecionadoObj
+          ? `Treinos de ${alunoSelecionadoObj.nome}`
+          : "Treinos"}
+      </h2>
+
+      {perfil?.tipo === "professor" && !alunoSelecionadoObj && (
+        <Card>
+          <h3>Selecione um aluno</h3>
+          <p>
+            Escolha um aluno no campo acima para ver somente os treinos dele.
+            Assim os treinos ficam separados e organizados por aluno.
+          </p>
+        </Card>
+      )}
       <div style={styles.treinoTabs}>
         {treinosOrdenados.map((t) => {
           const progresso = calcularProgresso(t);
@@ -641,7 +991,7 @@ export default function App() {
                 {treino.dataTreino && <p><b>Data:</b> {treino.dataTreino}</p>}
               </div>
               <div>
-                {perfil?.tipo === "professor" && <button style={styles.primary} onClick={() => adicionarExercicio(treino)}>Adicionar exercício</button>}
+                {perfil?.tipo === "professor" && <button style={styles.primary} onClick={() => adicionarExercicio()}>Criar novo exercício</button>}
                 <button style={styles.secondary} onClick={() => reiniciarTreino(treino)}>Reiniciar treino</button>
                 {perfil?.tipo === "professor" && <button style={styles.danger} onClick={() => excluirTreino(treino.id)}>Excluir treino</button>}
               </div>
@@ -650,59 +1000,111 @@ export default function App() {
             <ProgressBar value={progresso} />
             {finalizado && <p style={styles.ok}>Treino finalizado. Clique em reiniciar para repetir na semana.</p>}
  
-            {exerciciosOrdenados.map((ex) => (
-              <div
-                key={ex.id}
-                draggable={perfil?.tipo === "professor"}
-                onDragStart={() => setDragExercicioId(ex.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => moverExercicio(treino, ex.id)}
-                style={{
-                  ...styles.exercise,
-                  opacity: ex.finalizado ? 0.55 : 1,
-                  background: ex.finalizado ? "#dcfce7" : "#f8fafc",
-                }}
-              >
-                <h3>{ex.finalizado ? "✅ " : "☐ "}{ex.nome}</h3>
-                {perfil?.tipo === "professor" && <small>Arraste para reordenar</small>}
- 
-                <Field label="Nome do exercício" disabled={perfil?.tipo !== "professor"} value={ex.nome} onChange={(v: any) => atualizarExercicio(treino, ex.id, "nome", v)} />
-                <Field label="Séries" disabled={perfil?.tipo !== "professor"} value={ex.series} onChange={(v: any) => atualizarExercicio(treino, ex.id, "series", v)} />
-                <Field label="Repetições" disabled={perfil?.tipo !== "professor"} value={ex.repeticoes} onChange={(v: any) => atualizarExercicio(treino, ex.id, "repeticoes", v)} />
-                <Field label="Descanso em segundos" disabled={perfil?.tipo !== "professor"} value={ex.descanso} onChange={(v: any) => atualizarExercicio(treino, ex.id, "descanso", v)} />
-                <Field label="Carga sugerida" disabled={perfil?.tipo !== "professor"} value={ex.cargaSugerida} onChange={(v: any) => atualizarExercicio(treino, ex.id, "cargaSugerida", v)} />
-                <Field label="Método" disabled={perfil?.tipo !== "professor"} value={ex.metodo} onChange={(v: any) => atualizarExercicio(treino, ex.id, "metodo", v)} />
-                <Field label="Velocidade" disabled={perfil?.tipo !== "professor"} value={ex.velocidade} onChange={(v: any) => atualizarExercicio(treino, ex.id, "velocidade", v)} />
-                <Field label="Vídeo/GIF" disabled={perfil?.tipo !== "professor"} value={ex.video} onChange={(v: any) => atualizarExercicio(treino, ex.id, "video", v)} />
-                <Field label="Carga usada pelo aluno" disabled={perfil?.tipo !== "aluno"} value={ex.cargaAtual} onChange={(v: any) => atualizarExercicio(treino, ex.id, "cargaAtual", v)} />
-                <Field label="Observação professor" disabled={perfil?.tipo !== "professor"} value={ex.obsProfessor} onChange={(v: any) => atualizarExercicio(treino, ex.id, "obsProfessor", v)} />
-                <Field label="Observação aluno" disabled={perfil?.tipo !== "aluno"} value={ex.obsAluno} onChange={(v: any) => atualizarExercicio(treino, ex.id, "obsAluno", v)} />
- 
-                {ex.video && <a href={ex.video} target="_blank">Ver vídeo</a>}
- 
-                {perfil?.tipo === "aluno" && (
-                  <>
-                    <h4>Séries</h4>
-                    {Array.from({ length: Number(ex.series) || 0 }, (_, i) => i + 1).map((s) => (
-                      <button key={s} style={{ ...styles.secondary, background: ex.seriesConcluidas?.includes(s) ? "#86efac" : "#e2e8f0" }} onClick={() => marcarSerie(treino, ex, s)}>
-                        Série {s}
-                      </button>
-                    ))}
-                    <button style={styles.success} onClick={() => finalizarExercicio(treino, ex)}>Finalizar exercício</button>
-                    <GraficoCarga historico={ex.historicoCargas || []} />
-                  </>
-                )}
- 
-                {perfil?.tipo === "professor" && (
-                  <>
-                    <button style={styles.success} onClick={() => alert("Exercício salvo!")}>Salvar exercício</button>
-                    <button style={styles.danger} onClick={() => excluirExercicio(treino, ex.id)}>Excluir exercício</button>
-                    <GraficoCarga historico={ex.historicoCargas || []} />
-                  </>
-                )}
+            {perfil?.tipo === "professor" && novoExercicioDraft && (
+              <div style={{ ...styles.exercise, border: "2px solid #2563eb", background: "#eff6ff" }}>
+                <h3>Novo exercício</h3>
+                <p>Preencha os campos e clique em salvar. Ele será adicionado no topo do treino.</p>
+
+                <Field label="Nome do exercício" disabled={false} value={novoExercicioDraft.nome} onChange={(v: any) => atualizarNovoExercicio("nome", v)} />
+                <Field label="Séries" disabled={false} value={novoExercicioDraft.series} onChange={(v: any) => atualizarNovoExercicio("series", v)} />
+                <Field label="Repetições" disabled={false} value={novoExercicioDraft.repeticoes} onChange={(v: any) => atualizarNovoExercicio("repeticoes", v)} />
+                <Field label="Descanso em segundos" disabled={false} value={novoExercicioDraft.descanso} onChange={(v: any) => atualizarNovoExercicio("descanso", v)} />
+                <Field label="Carga sugerida" disabled={false} value={novoExercicioDraft.cargaSugerida} onChange={(v: any) => atualizarNovoExercicio("cargaSugerida", v)} />
+                <Field label="Método" disabled={false} value={novoExercicioDraft.metodo} onChange={(v: any) => atualizarNovoExercicio("metodo", v)} />
+                <Field label="Velocidade" disabled={false} value={novoExercicioDraft.velocidade} onChange={(v: any) => atualizarNovoExercicio("velocidade", v)} />
+                <Field label="Vídeo/GIF" disabled={false} value={novoExercicioDraft.video} onChange={(v: any) => atualizarNovoExercicio("video", v)} />
+                <Field label="Observação professor" disabled={false} value={novoExercicioDraft.obsProfessor} onChange={(v: any) => atualizarNovoExercicio("obsProfessor", v)} />
+
+                <button style={styles.success} onClick={() => salvarNovoExercicio(treino)}>
+                  Salvar novo exercício
+                </button>
+
+                <button style={styles.secondary} onClick={() => setNovoExercicioDraft(null)}>
+                  Cancelar
+                </button>
               </div>
-            ))}
- 
+            )}
+
+            {exerciciosOrdenados.map((ex) => {
+              const aberto = exercicioAbertoId === ex.id;
+
+              return (
+                <div
+                  key={ex.id}
+                  draggable={perfil?.tipo === "professor"}
+                  onDragStart={() => setDragExercicioId(ex.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => moverExercicio(treino, ex.id)}
+                  style={{
+                    ...styles.exercise,
+                    opacity: ex.finalizado ? 0.55 : 1,
+                    background: ex.finalizado ? "#dcfce7" : "#f8fafc",
+                  }}
+                >
+                  <div style={styles.exerciseHeader}>
+                    <button
+                      style={styles.exerciseTitleButton}
+                      onClick={() => setExercicioAbertoId(aberto ? "" : ex.id)}
+                    >
+                      {ex.finalizado ? "✅ " : "☐ "}
+                      {ex.nome || "Exercício sem nome"}
+                    </button>
+
+                    <small>{aberto ? "Aberto" : "Minimizado"}</small>
+                  </div>
+
+                  {perfil?.tipo === "professor" && <small>Arraste para reordenar</small>}
+
+                  {aberto && (
+                    <>
+                      <Field label="Nome do exercício" disabled={perfil?.tipo !== "professor"} value={ex.nome} onChange={(v: any) => atualizarExercicio(treino, ex.id, "nome", v)} />
+                      <Field label="Séries" disabled={perfil?.tipo !== "professor"} value={ex.series} onChange={(v: any) => atualizarExercicio(treino, ex.id, "series", v)} />
+                      <Field label="Repetições" disabled={perfil?.tipo !== "professor"} value={ex.repeticoes} onChange={(v: any) => atualizarExercicio(treino, ex.id, "repeticoes", v)} />
+                      <Field label="Descanso em segundos" disabled={perfil?.tipo !== "professor"} value={ex.descanso} onChange={(v: any) => atualizarExercicio(treino, ex.id, "descanso", v)} />
+                      <Field label="Carga sugerida" disabled={perfil?.tipo !== "professor"} value={ex.cargaSugerida} onChange={(v: any) => atualizarExercicio(treino, ex.id, "cargaSugerida", v)} />
+                      <Field label="Método" disabled={perfil?.tipo !== "professor"} value={ex.metodo} onChange={(v: any) => atualizarExercicio(treino, ex.id, "metodo", v)} />
+                      <Field label="Velocidade" disabled={perfil?.tipo !== "professor"} value={ex.velocidade} onChange={(v: any) => atualizarExercicio(treino, ex.id, "velocidade", v)} />
+                      <Field label="Vídeo/GIF" disabled={perfil?.tipo !== "professor"} value={ex.video} onChange={(v: any) => atualizarExercicio(treino, ex.id, "video", v)} />
+                      <Field label="Carga usada pelo aluno" disabled={perfil?.tipo !== "aluno"} value={ex.cargaAtual} onChange={(v: any) => atualizarExercicio(treino, ex.id, "cargaAtual", v)} />
+                      <Field label="Observação professor" disabled={perfil?.tipo !== "professor"} value={ex.obsProfessor} onChange={(v: any) => atualizarExercicio(treino, ex.id, "obsProfessor", v)} />
+                      <Field label="Observação aluno" disabled={perfil?.tipo !== "aluno"} value={ex.obsAluno} onChange={(v: any) => atualizarExercicio(treino, ex.id, "obsAluno", v)} />
+
+                      {ex.video && <a href={ex.video} target="_blank">Ver vídeo</a>}
+
+                      {perfil?.tipo === "aluno" && (
+                        <>
+                          <h4>Séries</h4>
+                          {Array.from({ length: Number(ex.series) || 0 }, (_, i) => i + 1).map((s) => (
+                            <button key={s} style={{ ...styles.secondary, background: ex.seriesConcluidas?.includes(s) ? "#86efac" : "#e2e8f0" }} onClick={() => marcarSerie(treino, ex, s)}>
+                              Série {s}
+                            </button>
+                          ))}
+                          <button style={styles.success} onClick={() => finalizarExercicio(treino, ex)}>Finalizar exercício</button>
+                          <GraficoCarga historico={ex.historicoCargas || []} />
+                        </>
+                      )}
+
+                      {perfil?.tipo === "professor" && (
+                        <>
+                          <button
+                            style={styles.success}
+                            onClick={() => {
+                              setExercicioAbertoId("");
+                              alert("Exercício salvo e minimizado!");
+                            }}
+                          >
+                            Salvar exercício
+                          </button>
+                          <button style={styles.danger} onClick={() => excluirExercicio(treino, ex.id)}>Excluir exercício</button>
+                          <GraficoCarga historico={ex.historicoCargas || []} />
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
             <div style={styles.messages}>
               <h3>Mensagens</h3>
               {(treino.mensagens || []).map((m, i) => <p key={i}><b>{m.autor}:</b> {m.texto} <small>{m.data}</small></p>)}
@@ -712,6 +1114,8 @@ export default function App() {
           </Card>
         );
       })}
+        </>
+      )}
     </Page>
   );
 }
@@ -812,11 +1216,13 @@ const styles: any = {
   tabAtiva: { padding: "12px 16px", borderRadius: 12, border: "none", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "bold" },
   treinoHeader: { display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
   exercise: { border: "1px solid #cbd5e1", padding: 15, borderRadius: 14, marginTop: 15 },
+  exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  exerciseTitleButton: { border: "none", background: "transparent", cursor: "pointer", fontSize: 22, fontWeight: "bold", color: "#0f172a", textAlign: "left" },
   input: { width: "100%", padding: 10, marginTop: 5, marginBottom: 10, borderRadius: 10, border: "1px solid #cbd5e1", boxSizing: "border-box" },
   label: { fontWeight: "bold", display: "block" },
   primary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "bold" },
-  secondary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#e2e8f0", cursor: "pointer", fontWeight: "bold" },
-  danger: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#fee2e2", color: "#991b1b", cursor: "pointer", fontWeight: "bold" },
+  secondary: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#2563eb", color: "white", cursor: "pointer", fontWeight: "bold", opacity: 1 },
+  danger: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: "bold", opacity: 1 },
   success: { padding: "10px 14px", margin: 5, borderRadius: 10, border: "none", background: "#dcfce7", color: "#166534", cursor: "pointer", fontWeight: "bold" },
   messages: { marginTop: 20, padding: 15, background: "#f1f5f9", borderRadius: 12 },
   progressBg: { width: "100%", height: 12, background: "#e2e8f0", borderRadius: 20, overflow: "hidden", marginTop: 8, marginBottom: 10 },
@@ -824,5 +1230,13 @@ const styles: any = {
   ok: { padding: 10, background: "#dcfce7", color: "#166534", borderRadius: 10, fontWeight: "bold" },
   timerFixo: { position: "sticky", top: 0, zIndex: 10, padding: 12, background: "#0f172a", color: "white", borderRadius: 12, marginBottom: 15, boxShadow: "0 6px 16px rgba(0,0,0,.25)" },
   chartBox: { marginTop: 12, padding: 12, background: "white", borderRadius: 12, border: "1px solid #cbd5e1" },
+  alunoSelecionadoBox: { padding: 12, background: "#dbeafe", border: "1px solid #2563eb", borderRadius: 12, marginTop: 10 },
+  professorTabs: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 15 },
+  alunoGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 14 },
+  alunoCardGerenciar: { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 14, padding: 15 },
+  alunoLinhaTopo: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  alunoInfoLinha: { display: "flex", alignItems: "center", gap: 10 },
+  alunoFotoMini: { width: 55, height: 55, borderRadius: "50%", objectFit: "cover", border: "2px solid #2563eb" },
   fotoPreview: { width: 90, height: 90, borderRadius: "50%", objectFit: "cover", border: "3px solid #2563eb", marginBottom: 10 },
 };
+
