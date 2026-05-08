@@ -1239,3 +1239,4 @@ const styles: any = {
   alunoFotoMini: { width: 55, height: 55, borderRadius: "50%", objectFit: "cover", border: "2px solid #2563eb" },
   fotoPreview: { width: 90, height: 90, borderRadius: "50%", objectFit: "cover", border: "3px solid #2563eb", marginBottom: 10 },
 };
+
