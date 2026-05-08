@@ -134,24 +134,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(CACHE_TREINOS, JSON.stringify(treinos));
   }, [treinos]);
-
-
-  useEffect(() => {
-    const treinoAindaExisteNaLista = treinosOrdenados.some(
-      (t) => t.id === treinoAbertoId
-    );
-
-    if (treinosOrdenados.length === 0) {
-      setTreinoAbertoId("");
-      return;
-    }
-
-    if (!treinoAbertoId || !treinoAindaExisteNaLista) {
-      setTreinoAbertoId(treinosOrdenados[0].id);
-    }
-  }, [treinosOrdenados, treinoAbertoId]);
- 
-  useEffect(() => {
+useEffect(() => {
     if (!timerAtivo) return;
     if (tempoRestante <= 0) {
       setTimerAtivo(false);
@@ -651,24 +634,21 @@ export default function App() {
   }
 
   const alunoSelecionadoObj = useMemo(
-    () => alunos.find((aluno) => aluno.id === alunoSelecionado),
+    () => alunos.find((a) => a.id === alunoSelecionado),
     [alunos, alunoSelecionado]
   );
 
   const treinosVisiveis = useMemo(() => {
-    // REGRA PRINCIPAL:
-    // Professor só vê treinos do aluno selecionado.
     if (perfil?.tipo === "professor") {
       if (!alunoSelecionadoObj) return [];
 
       return treinos.filter(
-        (t) =>
-          t.alunoId === alunoSelecionadoObj.id ||
-          t.alunoEmail === alunoSelecionadoObj.email
+        (treino) =>
+          treino.alunoId === alunoSelecionadoObj.id ||
+          treino.alunoEmail === alunoSelecionadoObj.email
       );
     }
 
-    // Aluno vê somente os próprios treinos, pois o Firestore já filtra por e-mail.
     return treinos;
   }, [treinos, perfil, alunoSelecionadoObj]);
 
@@ -679,6 +659,21 @@ export default function App() {
       ),
     [treinosVisiveis]
   );
+
+  useEffect(() => {
+    const existeTreinoAbertoNaLista = treinosOrdenados.some(
+      (treino) => treino.id === treinoAbertoId
+    );
+
+    if (treinosOrdenados.length === 0) {
+      if (treinoAbertoId) setTreinoAbertoId("");
+      return;
+    }
+
+    if (!treinoAbertoId || !existeTreinoAbertoNaLista) {
+      setTreinoAbertoId(treinosOrdenados[0].id);
+    }
+  }, [treinosOrdenados, treinoAbertoId]);
 
   useEffect(() => {
     if (treinosOrdenados.length === 0) {
@@ -1244,4 +1239,3 @@ const styles: any = {
   alunoFotoMini: { width: 55, height: 55, borderRadius: "50%", objectFit: "cover", border: "2px solid #2563eb" },
   fotoPreview: { width: 90, height: 90, borderRadius: "50%", objectFit: "cover", border: "3px solid #2563eb", marginBottom: 10 },
 };
-
