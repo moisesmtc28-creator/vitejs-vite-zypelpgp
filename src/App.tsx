@@ -399,7 +399,7 @@ useEffect(() => {
     carregarTudo();
   }
  
-  function adicionarExercicio(treino: Treino) {
+  function adicionarExercicio( ) {
     const novo: Exercicio = {
       id: uid(),
       nome: "",
@@ -991,7 +991,7 @@ useEffect(() => {
                 {treino.dataTreino && <p><b>Data:</b> {treino.dataTreino}</p>}
               </div>
               <div>
-                {perfil?.tipo === "professor" && <button style={styles.primary} onClick={() => adicionarExercicio(treino)}>Criar novo exercício</button>}
+                {perfil?.tipo === "professor" && <button style={styles.primary} onClick={() => adicionarExercicio()}>Criar novo exercício</button>}
                 <button style={styles.secondary} onClick={() => reiniciarTreino(treino)}>Reiniciar treino</button>
                 {perfil?.tipo === "professor" && <button style={styles.danger} onClick={() => excluirTreino(treino.id)}>Excluir treino</button>}
               </div>
