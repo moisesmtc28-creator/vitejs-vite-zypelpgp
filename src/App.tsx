@@ -458,7 +458,7 @@ export default function App() {
   }
 
 
-  async function migrarDadosSemPerder() {
+ async function migrarDadosSemPerder() {
     if (!isAdmin) {
       alert("Apenas administrador pode executar a migração.");
       return;
@@ -518,7 +518,7 @@ export default function App() {
       alert("Erro na migração. Verifique as regras do Firestore.");
     }
   }
-
+void migrarDadosSemPerder;
   async function cadastrar() {
     try {
       if (!email.includes("@")) return alert("Digite um e-mail válido.");
