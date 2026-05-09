@@ -35,8 +35,6 @@ type Perfil = {
   status?: StatusUsuario;
   primeiroAcesso?: boolean;
   professorEmail?: string;
-  dataAtivacao?: string;
-  aprovadoPor?: string;
   foto?: string;
   formacao?: string;
   especialidade?: string;
@@ -48,7 +46,6 @@ type ConfigSistema = {
   whatsapp: string;
   email: string;
   textoContato: string;
-  admins: string[];
 };
 
 type AvaliacaoFisica = {
@@ -56,14 +53,23 @@ type AvaliacaoFisica = {
   data: string;
   peso: string;
   altura: string;
-  cintura: string;
-  quadril: string;
-  torax: string;
-  braco: string;
-  coxa: string;
+  imc: string;
   gordura: string;
   massaMagra: string;
-  imc: string;
+  pescoco: string;
+  ombros: string;
+  torax: string;
+  cintura: string;
+  abdomen: string;
+  quadril: string;
+  bicepsDireito: string;
+  bicepsEsquerdo: string;
+  antebracoDireito: string;
+  antebracoEsquerdo: string;
+  coxaDireita: string;
+  coxaEsquerda: string;
+  panturrilhaDireita: string;
+  panturrilhaEsquerda: string;
   observacoes: string;
 };
 
@@ -102,6 +108,7 @@ type Treino = {
   id: string;
   nome: string;
   dataTreino?: string;
+  dataCriacao?: string;
   alunoId: string;
   alunoNome: string;
   alunoEmail: string;
@@ -163,38 +170,40 @@ export default function App() {
   const [configSistema, setConfigSistema] = useState<ConfigSistema>({
     whatsapp: "37991231408",
     email: "moisesmtc28@gmail.com",
-    textoContato: "Adquira o EvoTrain",
-    admins: ["moisesmtc28@gmail.com"],
+    textoContato: "Contato para adquirir o aplicativo",
   });
 
-  const [novoAdminEmail, setNovoAdminEmail] = useState("");
-
   const [alunoDashId, setAlunoDashId] = useState("");
-  const [avaliacaoDraft, setAvaliacaoDraft] = useState<AvaliacaoFisica>({
+  const avaliacaoVazia = (): AvaliacaoFisica => ({
     id: "",
     data: new Date().toISOString().slice(0, 10),
     peso: "",
     altura: "",
-    cintura: "",
-    quadril: "",
-    torax: "",
-    braco: "",
-    coxa: "",
+    imc: "",
     gordura: "",
     massaMagra: "",
-    imc: "",
+    pescoco: "",
+    ombros: "",
+    torax: "",
+    cintura: "",
+    abdomen: "",
+    quadril: "",
+    bicepsDireito: "",
+    bicepsEsquerdo: "",
+    antebracoDireito: "",
+    antebracoEsquerdo: "",
+    coxaDireita: "",
+    coxaEsquerda: "",
+    panturrilhaDireita: "",
+    panturrilhaEsquerda: "",
     observacoes: "",
   });
 
-  const adminEmailsAtivos = useMemo(() => {
-    const listaConfig = (configSistema.admins || []).map((email) =>
-      email.toLowerCase().trim()
-    );
+  const [avaliacaoDraft, setAvaliacaoDraft] = useState<AvaliacaoFisica>(
+    avaliacaoVazia()
+  );
 
-    return Array.from(new Set([...ADMIN_EMAILS, ...listaConfig]));
-  }, [configSistema.admins]);
-
-  const isAdmin = !!perfil?.email && adminEmailsAtivos.includes(perfil.email.toLowerCase());
+  const isAdmin = !!perfil?.email && ADMIN_EMAILS.includes(perfil.email.toLowerCase());
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -206,6 +215,14 @@ export default function App() {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
+  }, []);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .catch((error) => console.log("Service Worker não registrado:", error));
+    }
   }, []);
 
   useEffect(() => {
@@ -299,18 +316,9 @@ export default function App() {
       const snap = await getDoc(ref);
 
       if (snap.exists()) {
-        const dados = snap.data() as Partial<ConfigSistema>;
-
         setConfigSistema({
-          whatsapp: dados.whatsapp || "37991231408",
-          email: dados.email || "moisesmtc28@gmail.com",
-          textoContato: dados.textoContato || "Adquira o EvoTrain",
-          admins: Array.from(
-            new Set([
-              "moisesmtc28@gmail.com",
-              ...((dados.admins || []) as string[]),
-            ].map((email) => email.toLowerCase().trim()))
-          ),
+          ...configSistema,
+          ...(snap.data() as ConfigSistema),
         });
         return;
       }
@@ -323,19 +331,9 @@ export default function App() {
 
   async function salvarConfigSistema() {
     try {
-      await setDoc(
-        doc(db, "configuracoes", "sistema"),
-        {
-          ...configSistema,
-          admins: Array.from(
-            new Set([
-              "moisesmtc28@gmail.com",
-              ...(configSistema.admins || []),
-            ].map((email) => email.toLowerCase().trim()))
-          ),
-        },
-        { merge: true }
-      );
+      await setDoc(doc(db, "configuracoes", "sistema"), configSistema, {
+        merge: true,
+      });
 
       alert("Contato salvo com sucesso.");
     } catch (error) {
@@ -347,34 +345,27 @@ export default function App() {
   async function carregarPerfil(user: any) {
     const ref = doc(db, "usuarios", user.uid);
     const snap = await getDoc(ref);
-
-    const emailUsuario = String(user.email || "").toLowerCase().trim();
-
-    const adminsConfig = (configSistema.admins || []).map((email) =>
-      String(email).toLowerCase().trim()
-    );
-
-    const ehAdmin =
-      emailUsuario === "moisesmtc28@gmail.com" ||
-      ADMIN_EMAILS.includes(emailUsuario) ||
-      adminsConfig.includes(emailUsuario);
+    const emailUsuario = String(user.email || "").toLowerCase();
+    const ehAdmin = ADMIN_EMAILS.includes(emailUsuario);
 
     if (snap.exists()) {
-      const dados = snap.data() as any;
+      const dados = snap.data() as Perfil;
 
-      const perfilCorrigido: Perfil = {
-        ...dados,
-        uid: user.uid,
-        nome: dados.nome || user.email || "",
-        email: user.email || dados.email || "",
-        tipo: ehAdmin ? "admin" : dados.tipo || "aluno",
-        status: dados.status || "aprovado",
-        primeiroAcesso: dados.primeiroAcesso ?? false,
-        foto: dados.foto || "",
-      };
+      if (ehAdmin && dados.tipo !== "admin") {
+        const perfilAdmin = {
+          ...dados,
+          uid: user.uid,
+          tipo: "admin" as TipoUsuario,
+          status: "aprovado" as StatusUsuario,
+          primeiroAcesso: false,
+        };
 
-      await setDoc(ref, perfilCorrigido, { merge: true });
-      setPerfil(perfilCorrigido);
+        await setDoc(ref, perfilAdmin, { merge: true });
+        setPerfil(perfilAdmin);
+        return;
+      }
+
+      setPerfil(dados);
       return;
     }
 
@@ -466,6 +457,68 @@ export default function App() {
     }
   }
 
+
+  async function migrarDadosSemPerder() {
+    if (!isAdmin) {
+      alert("Apenas administrador pode executar a migração.");
+      return;
+    }
+
+    const confirmar = confirm(
+      "Essa rotina NÃO apaga dados. Ela apenas adiciona campos novos que estiverem faltando em alunos e treinos antigos. Deseja continuar?"
+    );
+
+    if (!confirmar) return;
+
+    try {
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      const treinosSnap = await getDocs(collection(db, "treinos"));
+
+      await Promise.all(
+        alunosSnap.docs.map((documento) => {
+          const dados = documento.data() as any;
+
+          return setDoc(
+            doc(db, "alunos", documento.id),
+            {
+              avaliacoes: dados.avaliacoes || [],
+              atualizadoEm: dados.atualizadoEm || new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        })
+      );
+
+      await Promise.all(
+        treinosSnap.docs.map((documento) => {
+          const dados = documento.data() as any;
+
+          return setDoc(
+            doc(db, "treinos", documento.id),
+            {
+              dataCriacao:
+                dados.dataCriacao ||
+                dados.criadoEm ||
+                dados.dataTreino ||
+                new Date().toISOString(),
+              versaoFicha: dados.versaoFicha || 2,
+              exercicios: dados.exercicios || [],
+              mensagens: dados.mensagens || [],
+              atualizadoEm: dados.atualizadoEm || new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        })
+      );
+
+      alert("Migração concluída sem apagar dados.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro na migração. Verifique as regras do Firestore.");
+    }
+  }
+
   async function cadastrar() {
     try {
       if (!email.includes("@")) return alert("Digite um e-mail válido.");
@@ -489,7 +542,15 @@ export default function App() {
         descricao: "",
       };
 
-      await setDoc(doc(db, "usuarios", cred.user.uid), novoPerfil);
+      await setDoc(
+        doc(db, "usuarios", cred.user.uid),
+        {
+          ...novoPerfil,
+          criadoEm: new Date().toISOString(),
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
       alert("Solicitação enviada. Aguarde aprovação do administrador.");
     } catch (e: any) {
       alert(traduzErro(e.message));
@@ -525,106 +586,61 @@ export default function App() {
   async function salvarPerfil() {
     if (!perfil) return;
 
-    await updateDoc(doc(db, "usuarios", perfil.uid), perfil as any);
+    await setDoc(
+      doc(db, "usuarios", perfil.uid),
+      {
+        ...perfil,
+        atualizadoEm: new Date().toISOString(),
+      } as any,
+      { merge: true }
+    );
     alert("Perfil salvo!");
   }
 
   async function aprovarProfessor(professor: Perfil) {
-    await updateDoc(doc(db, "usuarios", professor.uid), {
-      status: "aprovado",
-      dataAtivacao: professor.dataAtivacao || new Date().toLocaleString(),
-      aprovadoPor: perfil?.email || "",
-    });
+    try {
+      await setDoc(
+        doc(db, "usuarios", professor.uid),
+        {
+          ...professor,
+          tipo: "professor",
+          status: "aprovado",
+          ativo: true,
+          aprovadoEm: new Date().toISOString(),
+          atualizadoEm: new Date().toISOString(),
+        } as any,
+        { merge: true }
+      );
 
-    alert("Professor aprovado.");
-    carregarTudo();
+      alert("Professor aprovado.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao aprovar professor. Verifique as regras do Firestore.");
+    }
   }
 
   async function bloquearProfessor(professor: Perfil) {
     if (!confirm(`Bloquear professor ${professor.email}?`)) return;
 
-    await updateDoc(doc(db, "usuarios", professor.uid), {
-      status: "bloqueado",
-    });
+    try {
+      await setDoc(
+        doc(db, "usuarios", professor.uid),
+        {
+          status: "bloqueado",
+          ativo: false,
+          bloqueadoEm: new Date().toISOString(),
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
-    alert("Professor bloqueado.");
-    carregarTudo();
-  }
-
-  async function adicionarAdmin() {
-    const emailNovoAdmin = novoAdminEmail.trim().toLowerCase();
-
-    if (!emailNovoAdmin.includes("@")) {
-      alert("Digite um e-mail válido.");
-      return;
+      alert("Professor bloqueado.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao bloquear professor.");
     }
-
-    const admins = Array.from(
-      new Set([
-        "moisesmtc28@gmail.com",
-        ...(configSistema.admins || []),
-        emailNovoAdmin,
-      ].map((email) => email.toLowerCase().trim()))
-    );
-
-    const novaConfig = {
-      ...configSistema,
-      admins,
-    };
-
-    setConfigSistema(novaConfig);
-
-    await setDoc(doc(db, "configuracoes", "sistema"), novaConfig, {
-      merge: true,
-    });
-
-    setNovoAdminEmail("");
-    alert("Administrador adicionado.");
-  }
-
-  async function removerAdmin(emailAdmin: string) {
-    const emailNormalizado = emailAdmin.toLowerCase().trim();
-
-    if (emailNormalizado === "moisesmtc28@gmail.com") {
-      alert("O administrador principal não pode ser removido pelo sistema.");
-      return;
-    }
-
-    if (!confirm(`Remover ${emailAdmin} dos administradores?`)) return;
-
-    const admins = (configSistema.admins || []).filter(
-      (email) => email.toLowerCase().trim() !== emailNormalizado
-    );
-
-    const novaConfig = {
-      ...configSistema,
-      admins,
-    };
-
-    setConfigSistema(novaConfig);
-
-    await setDoc(doc(db, "configuracoes", "sistema"), novaConfig, {
-      merge: true,
-    });
-
-    alert("Administrador removido.");
-  }
-
-  function professoresResumoAdmin() {
-    return usuariosSistema
-      .filter((u) => u.tipo === "professor")
-      .map((professor) => {
-        const alunosProfessor = alunos.filter(
-          (aluno) =>
-            aluno.professorEmail?.toLowerCase() === professor.email?.toLowerCase()
-        );
-
-        return {
-          professor,
-          alunosProfessor,
-          quantidadeAlunos: alunosProfessor.length,
-        };
-      });
   }
 
   async function cadastrarAluno() {
@@ -664,16 +680,21 @@ export default function App() {
 
       const alunoUid = dadosAuth.localId;
 
-      await setDoc(doc(db, "usuarios", alunoUid), {
-        uid: alunoUid,
-        nome: novoAlunoNome,
-        email: novoAlunoEmail,
-        tipo: "aluno",
-        status: "aprovado",
-        primeiroAcesso: true,
-        professorEmail: usuario.email,
-        foto: novoAlunoFoto,
-      });
+      await setDoc(
+        doc(db, "usuarios", alunoUid),
+        {
+          uid: alunoUid,
+          nome: novoAlunoNome,
+          email: novoAlunoEmail,
+          tipo: "aluno",
+          status: "aprovado",
+          primeiroAcesso: true,
+          professorEmail: usuario.email,
+          foto: novoAlunoFoto,
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
       await addDoc(collection(db, "alunos"), {
         uid: alunoUid,
@@ -852,6 +873,8 @@ export default function App() {
     const ref = await addDoc(collection(db, "treinos"), {
       nome: nomeTreino,
       dataTreino,
+      dataCriacao: new Date().toISOString(),
+      versaoFicha: 2,
       alunoId: aluno.id,
       alunoNome: aluno.nome,
       alunoEmail: aluno.email,
@@ -940,9 +963,14 @@ export default function App() {
       )
     );
 
-    await updateDoc(doc(db, "treinos", treino.id), {
-      exercicios: atualizados,
-    });
+    await setDoc(
+      doc(db, "treinos", treino.id),
+      {
+        exercicios: atualizados,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     carregarTudo();
   }
@@ -1028,9 +1056,14 @@ export default function App() {
       data: new Date().toLocaleString(),
     };
 
-    await updateDoc(doc(db, "treinos", treino.id), {
-      mensagens: [...(treino.mensagens || []), nova],
-    });
+    await setDoc(
+      doc(db, "treinos", treino.id),
+      {
+        mensagens: [...(treino.mensagens || []), nova],
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     setMensagem("");
     carregarTudo();
@@ -1116,9 +1149,14 @@ export default function App() {
       return;
     }
 
-    await updateDoc(doc(db, "treinos", treino.id), {
-      nome: treino.nome,
-    });
+    await setDoc(
+      doc(db, "treinos", treino.id),
+      {
+        nome: treino.nome,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     alert("Nome do treino salvo!");
     carregarTudo();
@@ -1196,7 +1234,7 @@ export default function App() {
         data: avaliacao.data,
         tipo: "Avaliação",
         titulo: "Avaliação física",
-        detalhe: `Peso ${avaliacao.peso || "-"} kg | Gordura ${avaliacao.gordura || "-"}% | Massa magra ${avaliacao.massaMagra || "-"} kg`,
+        detalhe: `Peso ${avaliacao.peso || "-"} kg | Gordura ${avaliacao.gordura || "-"}% | Massa magra ${avaliacao.massaMagra || "-"} kg | Cintura ${avaliacao.cintura || "-"} cm`,
       })),
     ];
 
@@ -1251,25 +1289,16 @@ export default function App() {
       ...(aluno.avaliacoes || []).filter((a) => a.id !== nova.id),
     ];
 
-    await updateDoc(doc(db, "alunos", aluno.id), {
-      avaliacoes,
-    });
+    await setDoc(
+      doc(db, "alunos", aluno.id),
+      {
+        avaliacoes,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
-    setAvaliacaoDraft({
-      id: "",
-      data: new Date().toISOString().slice(0, 10),
-      peso: "",
-      altura: "",
-      cintura: "",
-      quadril: "",
-      torax: "",
-      braco: "",
-      coxa: "",
-      gordura: "",
-      massaMagra: "",
-      imc: "",
-      observacoes: "",
-    });
+    setAvaliacaoDraft(avaliacaoVazia());
 
     alert("Avaliação salva.");
     carregarTudo();
@@ -1280,9 +1309,14 @@ export default function App() {
 
     const avaliacoes = (aluno.avaliacoes || []).filter((a) => a.id !== avaliacaoId);
 
-    await updateDoc(doc(db, "alunos", aluno.id), {
-      avaliacoes,
-    });
+    await setDoc(
+      doc(db, "alunos", aluno.id),
+      {
+        avaliacoes,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     carregarTudo();
   }
@@ -1302,9 +1336,14 @@ export default function App() {
     try {
       await updatePassword(auth.currentUser, novaSenhaPrimeiroAcesso);
 
-      await updateDoc(doc(db, "usuarios", perfil.uid), {
-        primeiroAcesso: false,
-      });
+      await setDoc(
+        doc(db, "usuarios", perfil.uid),
+        {
+          primeiroAcesso: false,
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
       setPerfil({ ...perfil, primeiroAcesso: false });
       setNovaSenhaPrimeiroAcesso("");
@@ -1321,22 +1360,23 @@ export default function App() {
           <h1 style={styles.center}>EvoTrain</h1>
 
           <div style={styles.contatoBox}>
-            <b>{configSistema.textoContato || "Adquira o EvoTrain"}</b>
-
-            <div style={styles.contatoLinks}>
+            <b>{configSistema.textoContato}</b>
+            <p style={{ margin: "8px 0" }}>
+              WhatsApp:{" "}
               <a
                 href={`https://wa.me/55${configSistema.whatsapp.replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
-                style={styles.contatoWhatsapp}
               >
-                WhatsApp
+                {configSistema.whatsapp}
               </a>
-
-              <a href={`mailto:${configSistema.email}`} style={styles.contatoEmail}>
-                E-mail
+            </p>
+            <p style={{ margin: "8px 0" }}>
+              E-mail:{" "}
+              <a href={`mailto:${configSistema.email}`}>
+                {configSistema.email}
               </a>
-            </div>
+            </p>
           </div>
 
           <input
@@ -1537,85 +1577,53 @@ export default function App() {
         </button>
       </Card>
 
-      {(perfil?.tipo === "admin" || isAdmin) && (
+      {isAdmin && (
         <Card>
           <h2>Administração</h2>
-          <p>Gerencie professores, administradores e contato da tela inicial.</p>
+          <p>Aprovar, bloquear e acompanhar professores cadastrados.</p>
 
-          <div style={styles.dashboardGrid}>
-            <div style={styles.configBox}>
-              <h3>Contato da tela inicial</h3>
+          <div style={styles.configBox}>
+            <h3>Contato da tela inicial</h3>
 
-              <label style={styles.label}>Texto</label>
-              <input
-                style={styles.input}
-                value={configSistema.textoContato}
-                onChange={(e) =>
-                  setConfigSistema({
-                    ...configSistema,
-                    textoContato: e.target.value,
-                  })
-                }
-              />
+            <label style={styles.label}>Texto</label>
+            <input
+              style={styles.input}
+              value={configSistema.textoContato}
+              onChange={(e) =>
+                setConfigSistema({
+                  ...configSistema,
+                  textoContato: e.target.value,
+                })
+              }
+            />
 
-              <label style={styles.label}>WhatsApp</label>
-              <input
-                style={styles.input}
-                value={configSistema.whatsapp}
-                onChange={(e) =>
-                  setConfigSistema({
-                    ...configSistema,
-                    whatsapp: e.target.value,
-                  })
-                }
-              />
+            <label style={styles.label}>WhatsApp</label>
+            <input
+              style={styles.input}
+              value={configSistema.whatsapp}
+              onChange={(e) =>
+                setConfigSistema({
+                  ...configSistema,
+                  whatsapp: e.target.value,
+                })
+              }
+            />
 
-              <label style={styles.label}>E-mail</label>
-              <input
-                style={styles.input}
-                value={configSistema.email}
-                onChange={(e) =>
-                  setConfigSistema({
-                    ...configSistema,
-                    email: e.target.value,
-                  })
-                }
-              />
+            <label style={styles.label}>E-mail</label>
+            <input
+              style={styles.input}
+              value={configSistema.email}
+              onChange={(e) =>
+                setConfigSistema({
+                  ...configSistema,
+                  email: e.target.value,
+                })
+              }
+            />
 
-              <button style={styles.primary} onClick={salvarConfigSistema}>
-                Salvar contato
-              </button>
-            </div>
-
-            <div style={styles.configBox}>
-              <h3>Administradores</h3>
-
-              <div style={styles.inputLine}>
-                <input
-                  style={styles.input}
-                  placeholder="E-mail do novo administrador"
-                  value={novoAdminEmail}
-                  onChange={(e) => setNovoAdminEmail(e.target.value)}
-                />
-
-                <button style={styles.primary} onClick={adicionarAdmin}>
-                  Adicionar admin
-                </button>
-              </div>
-
-              {(configSistema.admins || []).map((adminEmail) => (
-                <div key={adminEmail} style={styles.adminLinha}>
-                  <span>{adminEmail}</span>
-
-                  <button
-                    style={styles.danger}
-                    onClick={() => removerAdmin(adminEmail)}
-                  >
-                    Remover
-                  </button>
-                </div>
-              ))}
-            </div>
+            <button style={styles.primary} onClick={salvarConfigSistema}>
+              Salvar contato
+            </button>
           </div>
 
           <h3>Professores pendentes</h3>
@@ -1627,74 +1635,45 @@ export default function App() {
           {usuariosSistema
             .filter((u) => u.tipo === "professor" && u.status === "pendente")
             .map((professor) => (
-              <div key={professor.uid} style={styles.professorAdminCard}>
-                <div>
-                  <b>{professor.nome || professor.email}</b>
-                  <br />
-                  <small>{professor.email}</small>
-                  <p>Status: pendente</p>
-                </div>
+              <div key={professor.uid} style={styles.alunoCardGerenciar}>
+                <b>{professor.nome || professor.email}</b>
+                <br />
+                <small>{professor.email}</small>
+                <br />
 
-                <div>
-                  <button
-                    style={styles.success}
-                    onClick={() => aprovarProfessor(professor)}
-                  >
-                    Aprovar professor
-                  </button>
+                <button
+                  style={styles.success}
+                  onClick={() => aprovarProfessor(professor)}
+                >
+                  Aprovar professor
+                </button>
 
-                  <button
-                    style={styles.danger}
-                    onClick={() => bloquearProfessor(professor)}
-                  >
-                    Bloquear
-                  </button>
-                </div>
+                <button
+                  style={styles.danger}
+                  onClick={() => bloquearProfessor(professor)}
+                >
+                  Bloquear
+                </button>
               </div>
             ))}
 
-          <h3>Professores ativos</h3>
+          <h3>Professores aprovados/bloqueados</h3>
 
-          {professoresResumoAdmin()
-            .filter(({ professor }) => professor.status !== "pendente")
-            .map(({ professor, alunosProfessor, quantidadeAlunos }) => (
-              <div key={professor.uid} style={styles.professorAdminCard}>
-                <div>
-                  <h3 style={{ margin: 0 }}>{professor.nome || professor.email}</h3>
-                  <small>{professor.email}</small>
+          {usuariosSistema
+            .filter((u) => u.tipo === "professor" && u.status !== "pendente")
+            .map((professor) => (
+              <div key={professor.uid} style={styles.alunoCardGerenciar}>
+                <b>{professor.nome || professor.email}</b>
+                <br />
+                <small>{professor.email}</small>
+                <p>Status: {professor.status || "aprovado"}</p>
 
-                  <p>
-                    <b>Status:</b> {professor.status || "aprovado"} |{" "}
-                    <b>Ativação:</b> {professor.dataAtivacao || "Não informado"} |{" "}
-                    <b>Alunos:</b> {quantidadeAlunos}
-                  </p>
-
-                  {professor.aprovadoPor && (
-                    <small>Aprovado por: {professor.aprovadoPor}</small>
-                  )}
-
-                  <details style={styles.detailsBox}>
-                    <summary>Ver alunos deste professor ({quantidadeAlunos})</summary>
-
-                    {alunosProfessor.length === 0 && <p>Nenhum aluno cadastrado.</p>}
-
-                    {alunosProfessor.map((aluno) => (
-                      <div key={aluno.id} style={styles.adminAlunoLinha}>
-                        <b>{aluno.nome}</b>
-                        <small>{aluno.email}</small>
-                      </div>
-                    ))}
-                  </details>
-                </div>
-
-                <div>
-                  <button
-                    style={styles.danger}
-                    onClick={() => bloquearProfessor(professor)}
-                  >
-                    Bloquear
-                  </button>
-                </div>
+                <button
+                  style={styles.danger}
+                  onClick={() => bloquearProfessor(professor)}
+                >
+                  Bloquear
+                </button>
               </div>
             ))}
         </Card>
@@ -2020,9 +1999,17 @@ export default function App() {
 
                       {treino.dataTreino && (
                         <p>
-                          <b>Data:</b> {treino.dataTreino}
+                          <b>Data do treino:</b> {treino.dataTreino}
                         </p>
                       )}
+
+                      <p>
+                        <b>Ficha criada em:</b>{" "}
+                        {formatarDataCriacaoTreino(treino.dataCriacao || treino.criadoEm)}
+                        {" | "}
+                        <b>Tempo com a ficha:</b>{" "}
+                        {calcularDiasFicha(treino.dataCriacao || treino.criadoEm)} dias
+                      </p>
                     </div>
 
                     <div>
@@ -2416,6 +2403,35 @@ function formatarTempo(segundos: number) {
   return `${m}:${s}`;
 }
 
+function formatarDataCriacaoTreino(valor: any) {
+  if (!valor) return "Não informado";
+
+  try {
+    if (typeof valor === "string") return new Date(valor).toLocaleDateString();
+    if (valor?.seconds) return new Date(valor.seconds * 1000).toLocaleDateString();
+    return String(valor);
+  } catch {
+    return "Não informado";
+  }
+}
+
+function calcularDiasFicha(valor: any) {
+  if (!valor) return 0;
+
+  try {
+    const data =
+      typeof valor === "string"
+        ? new Date(valor)
+        : valor?.seconds
+          ? new Date(valor.seconds * 1000)
+          : new Date(valor);
+
+    return Math.max(0, Math.floor((Date.now() - data.getTime()) / (1000 * 60 * 60 * 24)));
+  } catch {
+    return 0;
+  }
+}
+
 function traduzErro(msg: string) {
   if (msg.includes("EMAIL_EXISTS")) return "Esse e-mail já está cadastrado.";
   if (msg.includes("auth/invalid-email")) return "E-mail inválido.";
@@ -2545,17 +2561,39 @@ function DashboardAluno({
           <label style={styles.label}>Data</label>
           <input style={styles.input} type="date" value={avaliacaoDraft.data} onChange={(e) => atualizarAvaliacao("data", e.target.value)} />
 
+          <h4>Dados gerais</h4>
           <div style={styles.formGrid}>
             <CampoAvaliacao label="Peso kg" campo="peso" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Altura cm ou m" campo="altura" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="Cintura cm" campo="cintura" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="Quadril cm" campo="quadril" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="Tórax cm" campo="torax" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="Braço cm" campo="braco" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="Coxa cm" campo="coxa" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="IMC automático" campo="imc" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="% gordura" campo="gordura" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Massa magra kg" campo="massaMagra" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
-            <CampoAvaliacao label="IMC automático" campo="imc" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+          </div>
+
+          <h4>Medidas centrais</h4>
+          <div style={styles.formGrid}>
+            <CampoAvaliacao label="Pescoço cm" campo="pescoco" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Ombros cm" campo="ombros" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Tórax cm" campo="torax" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Cintura cm" campo="cintura" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Abdômen cm" campo="abdomen" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Quadril cm" campo="quadril" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+          </div>
+
+          <h4>Membros superiores</h4>
+          <div style={styles.formGrid}>
+            <CampoAvaliacao label="Bíceps direito cm" campo="bicepsDireito" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Bíceps esquerdo cm" campo="bicepsEsquerdo" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Antebraço direito cm" campo="antebracoDireito" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Antebraço esquerdo cm" campo="antebracoEsquerdo" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+          </div>
+
+          <h4>Membros inferiores</h4>
+          <div style={styles.formGrid}>
+            <CampoAvaliacao label="Coxa direita cm" campo="coxaDireita" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Coxa esquerda cm" campo="coxaEsquerda" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Panturrilha direita cm" campo="panturrilhaDireita" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
+            <CampoAvaliacao label="Panturrilha esquerda cm" campo="panturrilhaEsquerda" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
           </div>
 
           <label style={styles.label}>Observações da avaliação</label>
@@ -2591,6 +2629,9 @@ function DashboardAluno({
             campo="massaMagra"
             sufixo="kg"
           />
+          <MiniGrafico titulo="Cintura" dados={dados.avaliacoes} campo="cintura" sufixo="cm" />
+          <MiniGrafico titulo="Coxa direita" dados={dados.avaliacoes} campo="coxaDireita" sufixo="cm" />
+          <MiniGrafico titulo="Coxa esquerda" dados={dados.avaliacoes} campo="coxaEsquerda" sufixo="cm" />
         </div>
       </div>
 
@@ -2635,7 +2676,7 @@ function DashboardAluno({
             <div>
               <b>{avaliacao.data}</b>
               <p>
-                Peso: {avaliacao.peso || "-"} kg | Gordura: {avaliacao.gordura || "-"}% | Massa magra: {avaliacao.massaMagra || "-"} kg | IMC: {avaliacao.imc || "-"}
+                Peso: {avaliacao.peso || "-"} kg | Gordura: {avaliacao.gordura || "-"}% | Massa magra: {avaliacao.massaMagra || "-"} kg | IMC: {avaliacao.imc || "-"} | Cintura: {avaliacao.cintura || "-"} cm
               </p>
               {avaliacao.observacoes && <small>{avaliacao.observacoes}</small>}
             </div>
@@ -2947,31 +2988,12 @@ const styles: any = {
     border: "2px solid #2563eb",
   },
   contatoBox: {
-    background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
-    border: "1px solid #93c5fd",
+    background: "#eff6ff",
+    border: "1px solid #2563eb",
     borderRadius: 14,
-    padding: "10px 14px",
-    marginBottom: 18,
-    boxShadow: "0 4px 10px rgba(37,99,235,.08)",
+    padding: 14,
+    marginBottom: 15,
     textAlign: "center",
-    fontSize: 13,
-  },
-  contatoLinks: {
-    display: "flex",
-    justifyContent: "center",
-    gap: 14,
-    flexWrap: "wrap",
-    marginTop: 6,
-  },
-  contatoWhatsapp: {
-    color: "#16a34a",
-    textDecoration: "none",
-    fontWeight: 700,
-  },
-  contatoEmail: {
-    color: "#2563eb",
-    textDecoration: "none",
-    fontWeight: 700,
   },
   configBox: {
     background: "#f8fafc",
@@ -3045,50 +3067,6 @@ const styles: any = {
     padding: 10,
     marginTop: 10,
     background: "#f8fafc",
-  },
-
-  professorAdminCard: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-    background: "#f8fafc",
-    border: "1px solid #cbd5e1",
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 10,
-  },
-  adminLinha: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    padding: 10,
-    border: "1px solid #cbd5e1",
-    borderRadius: 12,
-    marginTop: 8,
-    background: "white",
-  },
-  inputLine: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  },
-  detailsBox: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 12,
-    background: "white",
-    border: "1px solid #e2e8f0",
-  },
-  adminAlunoLinha: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-    padding: 8,
-    borderBottom: "1px solid #e2e8f0",
   },
   fotoPreview: {
     width: 90,
