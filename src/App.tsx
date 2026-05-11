@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-
+ 
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-
+ 
 import {
   collection,
   addDoc,
@@ -21,12 +21,12 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
-
+ 
 import { auth, db } from "./firebase";
-
+ 
 type TipoUsuario = "admin" | "professor" | "aluno";
 type StatusUsuario = "pendente" | "aprovado" | "bloqueado";
-
+ 
 type Perfil = {
   uid: string;
   nome: string;
@@ -41,13 +41,13 @@ type Perfil = {
   cref?: string;
   descricao?: string;
 };
-
+ 
 type ConfigSistema = {
   whatsapp: string;
   email: string;
   textoContato: string;
 };
-
+ 
 type AvaliacaoFisica = {
   id: string;
   data: string;
@@ -72,7 +72,7 @@ type AvaliacaoFisica = {
   panturrilhaEsquerda: string;
   observacoes: string;
 };
-
+ 
 type Aluno = {
   id: string;
   uid?: string;
@@ -83,7 +83,7 @@ type Aluno = {
   criadoEm?: any;
   avaliacoes?: AvaliacaoFisica[];
 };
-
+ 
 type Exercicio = {
   id: string;
   nome: string;
@@ -103,7 +103,7 @@ type Exercicio = {
   ordem: number;
   historicoCargas: { carga: string; data: string }[];
 };
-
+ 
 type Treino = {
   id: string;
   nome: string;
@@ -117,62 +117,79 @@ type Treino = {
   mensagens: { texto: string; autor: string; data: string }[];
   criadoEm?: any;
 };
-
+ 
+type TreinoModelo = {
+  id: string;
+  nome: string;
+  descricao?: string;
+  professorEmail: string;
+  exercicios: Exercicio[];
+  origemTreinoId?: string;
+  autoCriado?: boolean;
+  criadoEm?: any;
+  atualizadoEm?: any;
+};
+ 
 const CACHE_TREINOS = "evotrain_cache_treinos_v2";
 const uid = () => Date.now().toString() + Math.random().toString(16).slice(2);
-
+ 
 // Coloque aqui o e-mail administrador do sistema.
 const ADMIN_EMAILS = [
   "moisesmtc28@gmail.com",
   "moisesthadeu@live.com",
 ].map((email) => email.toLowerCase());
-
+ 
 export default function App() {
   const [usuario, setUsuario] = useState<any>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
-
+ 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-
+ 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [usuariosSistema, setUsuariosSistema] = useState<Perfil[]>([]);
   const [treinos, setTreinos] = useState<Treino[]>(() => {
     const cache = localStorage.getItem(CACHE_TREINOS);
     return cache ? JSON.parse(cache) : [];
   });
-
+ 
+  const [modelosTreino, setModelosTreino] = useState<TreinoModelo[]>([]);
+  const [modeloSelecionadoId, setModeloSelecionadoId] = useState("");
+  const [nomeModelo, setNomeModelo] = useState("");
+  const [descricaoModelo, setDescricaoModelo] = useState("");
+ 
   const [novoAlunoNome, setNovoAlunoNome] = useState("");
   const [novoAlunoEmail, setNovoAlunoEmail] = useState("");
   const [novoAlunoSenha, setNovoAlunoSenha] = useState("");
   const [novoAlunoFoto, setNovoAlunoFoto] = useState("");
-
+ 
   const [alunoSelecionado, setAlunoSelecionado] = useState("");
   const [nomeTreino, setNomeTreino] = useState("");
   const [dataTreino, setDataTreino] = useState("");
   const [treinoAbertoId, setTreinoAbertoId] = useState("");
   const [mensagem, setMensagem] = useState("");
-
+ 
   const [online, setOnline] = useState(navigator.onLine);
   const [notificacoes, setNotificacoes] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
-
+ 
   const [timerAtivo, setTimerAtivo] = useState(false);
   const [tempoRestante, setTempoRestante] = useState(0);
   const [timerInfo, setTimerInfo] = useState("Descanso");
-
+ 
   const [dragExercicioId, setDragExercicioId] = useState("");
   const [exercicioAbertoId, setExercicioAbertoId] = useState("");
   const [novoExercicioDraft, setNovoExercicioDraft] = useState<Exercicio | null>(null);
-  const [abaProfessor, setAbaProfessor] = useState<"treinos" | "alunos">("treinos");
+  const [abaProfessor, setAbaProfessor] = useState<"treinos" | "alunos" | "modelos">("treinos");
   const [novaSenhaPrimeiroAcesso, setNovaSenhaPrimeiroAcesso] = useState("");
-
+ 
   const [configSistema, setConfigSistema] = useState<ConfigSistema>({
     whatsapp: "37991231408",
     email: "moisesmtc28@gmail.com",
     textoContato: "Contato para adquirir o aplicativo",
   });
-
+ 
   const [alunoDashId, setAlunoDashId] = useState("");
   const avaliacaoVazia = (): AvaliacaoFisica => ({
     id: "",
@@ -198,25 +215,25 @@ export default function App() {
     panturrilhaEsquerda: "",
     observacoes: "",
   });
-
+ 
   const [avaliacaoDraft, setAvaliacaoDraft] = useState<AvaliacaoFisica>(
     avaliacaoVazia()
   );
-
+ 
   const isAdmin = !!perfil?.email && ADMIN_EMAILS.includes(perfil.email.toLowerCase());
-
+ 
   useEffect(() => {
     const on = () => setOnline(true);
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-
+ 
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
   }, []);
-
+ 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
@@ -224,13 +241,13 @@ export default function App() {
         .catch((error) => console.log("Service Worker não registrado:", error));
     }
   }, []);
-
+ 
   useEffect(() => {
     carregarConfigSistema();
-
+ 
     const unsub = onAuthStateChanged(auth, async (user) => {
       setUsuario(user);
-
+ 
       if (user) {
         await carregarPerfil(user);
       } else {
@@ -240,53 +257,53 @@ export default function App() {
         setUsuariosSistema([]);
       }
     });
-
+ 
     return () => unsub();
   }, []);
-
+ 
   useEffect(() => {
     if (usuario && perfil) {
       carregarTudo();
     }
   }, [usuario, perfil]);
-
+ 
   useEffect(() => {
     localStorage.setItem(CACHE_TREINOS, JSON.stringify(treinos));
   }, [treinos]);
-
+ 
   useEffect(() => {
     if (!timerAtivo) return;
-
+ 
     if (tempoRestante <= 0) {
       setTimerAtivo(false);
       tocarSomProfissional();
       enviarNotificacao("Descanso finalizado", "Hora da próxima série!");
       return;
     }
-
+ 
     const t = setTimeout(() => setTempoRestante((v) => v - 1), 1000);
     return () => clearTimeout(t);
   }, [timerAtivo, tempoRestante]);
-
+ 
   const alunoSelecionadoObj = useMemo(
     () => alunos.find((aluno) => aluno.id === alunoSelecionado),
     [alunos, alunoSelecionado]
   );
-
+ 
   const treinosVisiveis = useMemo(() => {
     if (perfil?.tipo === "professor") {
       if (!alunoSelecionadoObj) return [];
-
+ 
       return treinos.filter(
         (treino) =>
           treino.alunoId === alunoSelecionadoObj.id ||
           treino.alunoEmail === alunoSelecionadoObj.email
       );
     }
-
+ 
     return treinos;
   }, [treinos, perfil, alunoSelecionadoObj]);
-
+ 
   const treinosOrdenados = useMemo(
     () =>
       [...treinosVisiveis].sort((a, b) =>
@@ -294,27 +311,27 @@ export default function App() {
       ),
     [treinosVisiveis]
   );
-
+ 
   useEffect(() => {
     if (treinosOrdenados.length === 0) {
       if (treinoAbertoId) setTreinoAbertoId("");
       return;
     }
-
+ 
     const treinoAtualPertenceAoAluno = treinosOrdenados.some(
       (treino) => treino.id === treinoAbertoId
     );
-
+ 
     if (!treinoAbertoId || !treinoAtualPertenceAoAluno) {
       setTreinoAbertoId(treinosOrdenados[0].id);
     }
   }, [treinosOrdenados, treinoAbertoId]);
-
+ 
   async function carregarConfigSistema() {
     try {
       const ref = doc(db, "configuracoes", "sistema");
       const snap = await getDoc(ref);
-
+ 
       if (snap.exists()) {
         setConfigSistema({
           ...configSistema,
@@ -322,35 +339,35 @@ export default function App() {
         });
         return;
       }
-
+ 
       await setDoc(ref, configSistema);
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
     }
   }
-
+ 
   async function salvarConfigSistema() {
     try {
       await setDoc(doc(db, "configuracoes", "sistema"), configSistema, {
         merge: true,
       });
-
+ 
       alert("Contato salvo com sucesso.");
     } catch (error) {
       console.error(error);
       alert("Erro ao salvar contato.");
     }
   }
-
+ 
   async function carregarPerfil(user: any) {
     const ref = doc(db, "usuarios", user.uid);
     const snap = await getDoc(ref);
     const emailUsuario = String(user.email || "").toLowerCase();
     const ehAdmin = ADMIN_EMAILS.includes(emailUsuario);
-
+ 
     if (snap.exists()) {
       const dados = snap.data() as Perfil;
-
+ 
       if (ehAdmin && dados.tipo !== "admin") {
         const perfilAdmin = {
           ...dados,
@@ -359,16 +376,16 @@ export default function App() {
           status: "aprovado" as StatusUsuario,
           primeiroAcesso: false,
         };
-
+ 
         await setDoc(ref, perfilAdmin, { merge: true });
         setPerfil(perfilAdmin);
         return;
       }
-
+ 
       setPerfil(dados);
       return;
     }
-
+ 
     const novoPerfil: Perfil = {
       uid: user.uid,
       nome: user.email || "",
@@ -382,14 +399,14 @@ export default function App() {
       cref: "",
       descricao: "",
     };
-
+ 
     await setDoc(ref, novoPerfil, { merge: true });
     setPerfil(novoPerfil);
   }
-
+ 
   async function carregarTudo() {
     if (!usuario || !perfil) return;
-
+ 
     if (isAdmin) {
       const usuariosSnap = await getDocs(collection(db, "usuarios"));
       const listaUsuarios = usuariosSnap.docs.map((d) => {
@@ -399,12 +416,12 @@ export default function App() {
           ...dados,
         } as Perfil;
       });
-
+ 
       setUsuariosSistema(listaUsuarios);
     }
-
+ 
     let qAlunos: any;
-
+ 
     if (perfil.tipo === "professor") {
       qAlunos = query(
         collection(db, "alunos"),
@@ -418,7 +435,7 @@ export default function App() {
     } else {
       qAlunos = collection(db, "alunos");
     }
-
+ 
     const alunosSnap = await getDocs(qAlunos);
     const listaAlunos = alunosSnap.docs.map((d) => {
       const dados = d.data() as any;
@@ -427,12 +444,12 @@ export default function App() {
         ...dados,
       } as Aluno;
     });
-
+ 
     setAlunos(listaAlunos);
-
+ 
     const treinosRef = collection(db, "treinos");
     let qTreinos: any;
-
+ 
     if (perfil.tipo === "professor") {
       qTreinos = query(treinosRef, where("professorEmail", "==", usuario.email));
     } else if (perfil.tipo === "aluno") {
@@ -440,7 +457,7 @@ export default function App() {
     } else {
       qTreinos = treinosRef;
     }
-
+ 
     const treinosSnap = await getDocs(qTreinos);
     const listaTreinos = treinosSnap.docs.map((d) => {
       const dados = d.data() as any;
@@ -449,35 +466,52 @@ export default function App() {
         ...dados,
       } as Treino;
     });
-
+ 
     setTreinos(listaTreinos);
-
+ 
+    if (perfil.tipo === "professor") {
+      const modelosSnap = await getDocs(
+        query(collection(db, "modelosTreino"), where("professorEmail", "==", usuario.email))
+      );
+ 
+      const listaModelos = modelosSnap.docs.map((d) => {
+        const dados = d.data() as any;
+        return {
+          id: d.id,
+          ...dados,
+          exercicios: dados.exercicios || [],
+        } as TreinoModelo;
+      });
+ 
+      setModelosTreino(listaModelos);
+    }
+ 
     if (perfil.tipo !== "professor" && !treinoAbertoId && listaTreinos[0]) {
       setTreinoAbertoId(listaTreinos[0].id);
     }
   }
-
-
- async function migrarDadosSemPerder() {
+ 
+ 
+  async function migrarDadosSemPerder() {
     if (!isAdmin) {
       alert("Apenas administrador pode executar a migração.");
       return;
     }
-
+ 
     const confirmar = confirm(
       "Essa rotina NÃO apaga dados. Ela apenas adiciona campos novos que estiverem faltando em alunos e treinos antigos. Deseja continuar?"
     );
-
+ 
     if (!confirmar) return;
-
+ 
     try {
       const alunosSnap = await getDocs(collection(db, "alunos"));
       const treinosSnap = await getDocs(collection(db, "treinos"));
-
+ 
       await Promise.all(
         alunosSnap.docs.map((documento) => {
           const dados = documento.data() as any;
-
+ 
           return setDoc(
             doc(db, "alunos", documento.id),
             {
@@ -488,11 +522,11 @@ export default function App() {
           );
         })
       );
-
+ 
       await Promise.all(
         treinosSnap.docs.map((documento) => {
           const dados = documento.data() as any;
-
+ 
           return setDoc(
             doc(db, "treinos", documento.id),
             {
@@ -510,7 +544,7 @@ export default function App() {
           );
         })
       );
-
+ 
       alert("Migração concluída sem apagar dados.");
       carregarTudo();
     } catch (error) {
@@ -518,16 +552,16 @@ export default function App() {
       alert("Erro na migração. Verifique as regras do Firestore.");
     }
   }
-void migrarDadosSemPerder;
+ 
   async function cadastrar() {
     try {
       if (!email.includes("@")) return alert("Digite um e-mail válido.");
       if (senha.length < 6) {
         return alert("A senha precisa ter no mínimo 6 caracteres.");
       }
-
+ 
       const cred = await createUserWithEmailAndPassword(auth, email, senha);
-
+ 
       const novoPerfil: Perfil = {
         uid: cred.user.uid,
         nome: email,
@@ -541,7 +575,7 @@ void migrarDadosSemPerder;
         cref: "",
         descricao: "",
       };
-
+ 
       await setDoc(
         doc(db, "usuarios", cred.user.uid),
         {
@@ -556,7 +590,7 @@ void migrarDadosSemPerder;
       alert(traduzErro(e.message));
     }
   }
-
+ 
   async function entrar() {
     try {
       await signInWithEmailAndPassword(auth, email, senha);
@@ -564,28 +598,28 @@ void migrarDadosSemPerder;
       alert(traduzErro(e.message));
     }
   }
-
+ 
   async function recuperarSenha() {
     try {
       if (!email.includes("@")) {
         return alert("Digite seu e-mail para recuperar a senha.");
       }
-
+ 
       await sendPasswordResetEmail(auth, email);
       alert("E-mail de recuperação enviado.");
     } catch (e: any) {
       alert(traduzErro(e.message));
     }
   }
-
+ 
   async function sair() {
     await signOut(auth);
     setPerfil(null);
   }
-
+ 
   async function salvarPerfil() {
     if (!perfil) return;
-
+ 
     await setDoc(
       doc(db, "usuarios", perfil.uid),
       {
@@ -596,7 +630,7 @@ void migrarDadosSemPerder;
     );
     alert("Perfil salvo!");
   }
-
+ 
   async function aprovarProfessor(professor: Perfil) {
     try {
       await setDoc(
@@ -611,7 +645,7 @@ void migrarDadosSemPerder;
         } as any,
         { merge: true }
       );
-
+ 
       alert("Professor aprovado.");
       carregarTudo();
     } catch (error) {
@@ -619,10 +653,10 @@ void migrarDadosSemPerder;
       alert("Erro ao aprovar professor. Verifique as regras do Firestore.");
     }
   }
-
+ 
   async function bloquearProfessor(professor: Perfil) {
     if (!confirm(`Bloquear professor ${professor.email}?`)) return;
-
+ 
     try {
       await setDoc(
         doc(db, "usuarios", professor.uid),
@@ -634,7 +668,7 @@ void migrarDadosSemPerder;
         },
         { merge: true }
       );
-
+ 
       alert("Professor bloqueado.");
       carregarTudo();
     } catch (error) {
@@ -642,23 +676,23 @@ void migrarDadosSemPerder;
       alert("Erro ao bloquear professor.");
     }
   }
-
+ 
   async function cadastrarAluno() {
     if (!usuario) return;
-
+ 
     if (!novoAlunoNome || !novoAlunoEmail.includes("@")) {
       alert("Preencha nome e e-mail válido do aluno.");
       return;
     }
-
+ 
     if (novoAlunoSenha.length < 6) {
       alert("Digite uma senha provisória com no mínimo 6 caracteres.");
       return;
     }
-
+ 
     try {
       const apiKey = (auth.app.options as any).apiKey;
-
+ 
       const resposta = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
         {
@@ -671,15 +705,15 @@ void migrarDadosSemPerder;
           }),
         }
       );
-
+ 
       const dadosAuth = await resposta.json();
-
+ 
       if (!resposta.ok) {
         throw new Error(dadosAuth?.error?.message || "Erro ao criar login do aluno.");
       }
-
+ 
       const alunoUid = dadosAuth.localId;
-
+ 
       await setDoc(
         doc(db, "usuarios", alunoUid),
         {
@@ -695,7 +729,7 @@ void migrarDadosSemPerder;
         },
         { merge: true }
       );
-
+ 
       await addDoc(collection(db, "alunos"), {
         uid: alunoUid,
         nome: novoAlunoNome,
@@ -704,92 +738,92 @@ void migrarDadosSemPerder;
         professorEmail: usuario.email,
         criadoEm: new Date(),
       });
-
+ 
       setNovoAlunoNome("");
       setNovoAlunoEmail("");
       setNovoAlunoSenha("");
       setNovoAlunoFoto("");
-
+ 
       alert(
         "Aluno criado com senha provisória. No primeiro acesso ele será obrigado a trocar a senha."
       );
-
+ 
       carregarTudo();
     } catch (e: any) {
       alert(traduzErro(e.message));
     }
   }
-
+ 
   async function excluirAluno(aluno: Aluno) {
     if (!usuario) return;
-
+ 
     const confirmar = confirm(
       `Deseja excluir o aluno ${aluno.nome}? Os treinos dele também serão excluídos.`
     );
-
+ 
     if (!confirmar) return;
-
+ 
     try {
       await deleteDoc(doc(db, "alunos", aluno.id));
-
+ 
       if (aluno.uid) {
         await updateDoc(doc(db, "usuarios", aluno.uid), {
           status: "bloqueado",
         });
       }
-
+ 
       const qTreinosAluno = query(
         collection(db, "treinos"),
         where("professorEmail", "==", usuario.email),
         where("alunoEmail", "==", aluno.email)
       );
-
+ 
       const snap = await getDocs(qTreinosAluno);
-
+ 
       await Promise.all(
         snap.docs.map((documento) =>
           deleteDoc(doc(db, "treinos", documento.id))
         )
       );
-
+ 
       if (alunoSelecionado === aluno.id) {
         setAlunoSelecionado("");
         setTreinoAbertoId("");
       }
-
+ 
       carregarTudo();
     } catch (error) {
       console.error(error);
       alert("Erro ao excluir aluno.");
     }
   }
-
+ 
   async function editarEmailAluno(aluno: Aluno) {
     const novoEmail = prompt("Digite o novo e-mail do aluno:", aluno.email);
-
+ 
     if (!novoEmail || !novoEmail.includes("@")) {
       alert("E-mail inválido.");
       return;
     }
-
+ 
     try {
       await updateDoc(doc(db, "alunos", aluno.id), {
         email: novoEmail,
       });
-
+ 
       if (aluno.uid) {
         await updateDoc(doc(db, "usuarios", aluno.uid), {
           email: novoEmail,
         });
       }
-
+ 
       const qTreinosAluno = query(
         collection(db, "treinos"),
         where("alunoEmail", "==", aluno.email)
       );
-
+ 
       const snap = await getDocs(qTreinosAluno);
-
+ 
       await Promise.all(
         snap.docs.map((documento) =>
           updateDoc(doc(db, "treinos", documento.id), {
@@ -797,43 +831,43 @@ void migrarDadosSemPerder;
           })
         )
       );
-
+ 
       alert(
         "E-mail alterado no cadastro do app. Para alterar também o e-mail de login do Firebase Auth, use Firebase Functions/Admin SDK."
       );
-
+ 
       carregarTudo();
     } catch (error) {
       console.error(error);
       alert("Erro ao editar e-mail do aluno.");
     }
   }
-
+ 
   async function zerarDadosProfessor() {
     if (!usuario) return;
-
+ 
     const confirmacao = prompt(
       "Isso vai apagar TODOS os alunos e TODOS os treinos deste professor. Digite ZERAR para confirmar."
     );
-
+ 
     if (confirmacao !== "ZERAR") return;
-
+ 
     try {
       const qAlunosProfessor = query(
         collection(db, "alunos"),
         where("professorEmail", "==", usuario.email)
       );
-
+ 
       const qTreinosProfessor = query(
         collection(db, "treinos"),
         where("professorEmail", "==", usuario.email)
       );
-
+ 
       const [alunosSnap, treinosSnap] = await Promise.all([
         getDocs(qAlunosProfessor),
         getDocs(qTreinosProfessor),
       ]);
-
+ 
       await Promise.all([
         ...alunosSnap.docs.map((documento) =>
           deleteDoc(doc(db, "alunos", documento.id))
@@ -842,12 +876,12 @@ void migrarDadosSemPerder;
           deleteDoc(doc(db, "treinos", documento.id))
         ),
       ]);
-
+ 
       setAlunos([]);
       setTreinos([]);
       setAlunoSelecionado("");
       setTreinoAbertoId("");
-
+ 
       alert("Banco zerado para este professor.");
       carregarTudo();
     } catch (error) {
@@ -855,21 +889,220 @@ void migrarDadosSemPerder;
       alert("Erro ao zerar o banco de dados.");
     }
   }
-
-  async function criarTreino() {
-    if (!usuario) return;
-
-    if (!alunoSelecionado || !nomeTreino) {
-      return alert("Selecione o aluno e informe o nome do treino.");
+ 
+ 
+  async function salvarModeloAutomaticoDoTreino(treino: Treino, exerciciosAtualizados?: Exercicio[]) {
+    if (!usuario || perfil?.tipo !== "professor") return;
+ 
+    try {
+      const exerciciosModelo = (exerciciosAtualizados || treino.exercicios || []).map(
+        limparExercicioParaModelo
+      );
+ 
+      await setDoc(
+        doc(db, "modelosTreino", treino.id),
+        {
+          nome: treino.nome || "Treino sem nome",
+          descricao: `Modelo automático criado a partir da ficha de ${treino.alunoNome || "aluno"}`,
+          professorEmail: usuario.email,
+          origemTreinoId: treino.id,
+          autoCriado: true,
+          exercicios: exerciciosModelo,
+          criadoEm: treino.dataCriacao || treino.criadoEm || new Date().toISOString(),
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Erro ao salvar modelo automático:", error);
     }
-
+  }
+ 
+  function limparExercicioParaModelo(exercicio: Exercicio): Exercicio {
+    return {
+      ...exercicio,
+      id: uid(),
+      cargaAtual: "",
+      ultimaCarga: "",
+      obsAluno: "",
+      seriesConcluidas: [],
+      finalizado: false,
+      historicoCargas: [],
+    };
+  }
+ 
+  async function salvarTreinoComoModelo(treino: Treino) {
+    if (!usuario) return;
+ 
+    const nome = prompt("Nome do modelo de treino:", treino.nome);
+    if (!nome) return;
+ 
+    await setDoc(
+      doc(db, "modelosTreino", treino.id),
+      {
+        nome,
+        descricao: `Modelo criado a partir do treino ${treino.nome}`,
+        professorEmail: usuario.email,
+        origemTreinoId: treino.id,
+        autoCriado: false,
+        exercicios: (treino.exercicios || []).map(limparExercicioParaModelo),
+        criadoEm: treino.dataCriacao || new Date().toISOString(),
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+ 
+    alert("Modelo salvo com sucesso. Você poderá reutilizar em outros alunos.");
+    carregarTudo();
+  }
+ 
+  async function criarTreinoAPartirModelo() {
+    if (!usuario) return;
+ 
+    if (!alunoSelecionado) {
+      alert("Selecione um aluno antes de usar um modelo.");
+      return;
+    }
+ 
+    if (!modeloSelecionadoId) {
+      alert("Selecione um modelo de treino.");
+      return;
+    }
+ 
     const aluno = alunos.find((a) => a.id === alunoSelecionado);
-
+    const modelo = modelosTreino.find((m) => m.id === modeloSelecionadoId);
+ 
+    if (!aluno || !modelo) {
+      alert("Aluno ou modelo não encontrado.");
+      return;
+    }
+ 
+    const ref = await addDoc(collection(db, "treinos"), {
+      nome: nomeTreino || modelo.nome,
+      dataTreino,
+      dataCriacao: new Date().toISOString(),
+      versaoFicha: 2,
+      alunoId: aluno.id,
+      alunoNome: aluno.nome,
+      alunoEmail: aluno.email,
+      professorEmail: usuario.email,
+      exercicios: (modelo.exercicios || []).map(limparExercicioParaModelo),
+      mensagens: [],
+      origemModeloId: modelo.id,
+      criadoEm: new Date(),
+      atualizadoEm: new Date().toISOString(),
+    });
+ 
+    setTreinoAbertoId(ref.id);
+    setModeloSelecionadoId("");
+    setNomeTreino("");
+    setDataTreino("");
+    alert("Treino criado a partir do modelo.");
+    carregarTudo();
+  }
+ 
+  async function criarModeloVazio() {
+    if (!usuario) return;
+ 
+    if (!nomeModelo.trim()) {
+      alert("Informe o nome do modelo.");
+      return;
+    }
+ 
+    await addDoc(collection(db, "modelosTreino"), {
+      nome: nomeModelo,
+      descricao: descricaoModelo,
+      professorEmail: usuario.email,
+      exercicios: [],
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+    });
+ 
+    setNomeModelo("");
+    setDescricaoModelo("");
+    alert("Modelo vazio criado. Você pode salvar um treino completo como modelo depois.");
+    carregarTudo();
+  }
+ 
+  async function excluirModeloTreino(id: string) {
+    if (!confirm("Excluir modelo salvo? Os treinos dos alunos não serão apagados.")) return;
+ 
+    await deleteDoc(doc(db, "modelosTreino", id));
+    carregarTudo();
+  }
+ 
+  async function editarModeloTreino(modelo: TreinoModelo) {
+    const novoNome = prompt("Novo nome do modelo:", modelo.nome);
+    if (!novoNome) return;
+ 
+    const novaDescricao = prompt("Descrição do modelo:", modelo.descricao || "") || "";
+ 
+    await setDoc(
+      doc(db, "modelosTreino", modelo.id),
+      {
+        nome: novoNome,
+        descricao: novaDescricao,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+ 
+    alert("Modelo atualizado.");
+    carregarTudo();
+  }
+ 
+  async function aplicarModeloParaAluno(modelo: TreinoModelo) {
+    if (!usuario) return;
+ 
+    if (!alunoSelecionado) {
+      alert("Selecione um aluno para aplicar este modelo.");
+      return;
+    }
+ 
+    const aluno = alunos.find((a) => a.id === alunoSelecionado);
     if (!aluno) {
       alert("Aluno não encontrado.");
       return;
     }
-
+ 
+    const nomeFicha = prompt("Nome da nova ficha para o aluno:", modelo.nome) || modelo.nome;
+ 
+    const ref = await addDoc(collection(db, "treinos"), {
+      nome: nomeFicha,
+      dataTreino: new Date().toISOString().slice(0, 10),
+      dataCriacao: new Date().toISOString(),
+      versaoFicha: 2,
+      alunoId: aluno.id,
+      alunoNome: aluno.nome,
+      alunoEmail: aluno.email,
+      professorEmail: usuario.email,
+      exercicios: (modelo.exercicios || []).map(limparExercicioParaModelo),
+      mensagens: [],
+      origemModeloId: modelo.id,
+      criadoEm: new Date(),
+      atualizadoEm: new Date().toISOString(),
+    });
+ 
+    setTreinoAbertoId(ref.id);
+    setAbaProfessor("treinos");
+    alert("Modelo aplicado ao aluno selecionado.");
+    carregarTudo();
+  }
+ 
+  async function criarTreino() {
+    if (!usuario) return;
+ 
+    if (!alunoSelecionado || !nomeTreino) {
+      return alert("Selecione o aluno e informe o nome do treino.");
+    }
+ 
+    const aluno = alunos.find((a) => a.id === alunoSelecionado);
+ 
+    if (!aluno) {
+      alert("Aluno não encontrado.");
+      return;
+    }
+ 
     const ref = await addDoc(collection(db, "treinos"), {
       nome: nomeTreino,
       dataTreino,
@@ -882,22 +1115,38 @@ void migrarDadosSemPerder;
       exercicios: [],
       mensagens: [],
       criadoEm: new Date(),
+      atualizadoEm: new Date().toISOString(),
     });
-
+ 
+    await setDoc(
+      doc(db, "modelosTreino", ref.id),
+      {
+        nome: nomeTreino,
+        descricao: `Modelo automático criado a partir da ficha de ${aluno.nome}`,
+        professorEmail: usuario.email,
+        origemTreinoId: ref.id,
+        autoCriado: true,
+        exercicios: [],
+        criadoEm: new Date().toISOString(),
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+ 
     setTreinoAbertoId(ref.id);
     setNomeTreino("");
     setDataTreino("");
     carregarTudo();
   }
-
+ 
   async function excluirTreino(id: string) {
     if (!confirm("Excluir treino completo?")) return;
-
+ 
     await deleteDoc(doc(db, "treinos", id));
     setTreinoAbertoId("");
     carregarTudo();
   }
-
+ 
   function adicionarExercicio() {
     const novo: Exercicio = {
       id: uid(),
@@ -918,51 +1167,51 @@ void migrarDadosSemPerder;
       ordem: -1,
       historicoCargas: [],
     };
-
+ 
     setNovoExercicioDraft(novo);
     setExercicioAbertoId(novo.id);
   }
-
+ 
   function atualizarNovoExercicio(campo: keyof Exercicio, valor: any) {
     if (!novoExercicioDraft) return;
-
+ 
     setNovoExercicioDraft({
       ...novoExercicioDraft,
       [campo]: valor,
     });
   }
-
+ 
   async function salvarNovoExercicio(treino: Treino) {
     if (!novoExercicioDraft) return;
-
+ 
     if (!novoExercicioDraft.nome.trim()) {
       alert("Digite o nome do exercício.");
       return;
     }
-
+ 
     const novo: Exercicio = {
       ...novoExercicioDraft,
       ordem: 0,
     };
-
+ 
     await salvarExercicios(treino, [novo, ...(treino.exercicios || [])]);
-
+ 
     setNovoExercicioDraft(null);
     setExercicioAbertoId("");
   }
-
+ 
   async function salvarExercicios(treino: Treino, exercicios: Exercicio[]) {
     const atualizados = exercicios.map((e, index) => ({
       ...e,
       ordem: index,
     }));
-
+ 
     setTreinos((prev) =>
       prev.map((t) =>
         t.id === treino.id ? { ...t, exercicios: atualizados } : t
       )
     );
-
+ 
     await setDoc(
       doc(db, "treinos", treino.id),
       {
@@ -971,10 +1220,12 @@ void migrarDadosSemPerder;
       },
       { merge: true }
     );
-
+ 
+    await salvarModeloAutomaticoDoTreino(treino, atualizados);
+ 
     carregarTudo();
   }
-
+ 
   async function atualizarExercicio(
     treino: Treino,
     exId: string,
@@ -984,37 +1235,37 @@ void migrarDadosSemPerder;
     const exercicios = (treino.exercicios || []).map((ex) =>
       ex.id === exId ? { ...ex, [campo]: valor } : ex
     );
-
+ 
     await salvarExercicios(treino, exercicios);
   }
-
+ 
   async function excluirExercicio(treino: Treino, exId: string) {
     const exercicios = (treino.exercicios || []).filter((ex) => ex.id !== exId);
     await salvarExercicios(treino, exercicios);
   }
-
+ 
   async function marcarSerie(treino: Treino, ex: Exercicio, serie: number) {
     const atuais = ex.seriesConcluidas || [];
     const novas = atuais.includes(serie)
       ? atuais.filter((s) => s !== serie)
       : [...atuais, serie];
-
+ 
     const exercicios = treino.exercicios.map((e) =>
       e.id === ex.id ? { ...e, seriesConcluidas: novas } : e
     );
-
+ 
     await salvarExercicios(treino, exercicios);
     iniciarDescanso(Number(ex.descanso) || 60, `${ex.nome} - descanso`);
   }
-
+ 
   async function finalizarExercicio(treino: Treino, ex: Exercicio) {
     const todasSeries = Array.from(
       { length: Number(ex.series) || 0 },
       (_, i) => i + 1
     );
-
+ 
     const carga = ex.cargaAtual || ex.ultimaCarga || "";
-
+ 
     const exercicios = treino.exercicios.map((e) =>
       e.id === ex.id
         ? {
@@ -1032,10 +1283,10 @@ void migrarDadosSemPerder;
           }
         : e
     );
-
+ 
     await salvarExercicios(treino, exercicios);
   }
-
+ 
   async function reiniciarTreino(treino: Treino) {
     const exercicios = (treino.exercicios || []).map((e) => ({
       ...e,
@@ -1043,19 +1294,19 @@ void migrarDadosSemPerder;
       seriesConcluidas: [],
       cargaAtual: e.ultimaCarga || "",
     }));
-
+ 
     await salvarExercicios(treino, exercicios);
   }
-
+ 
   async function enviarMensagem(treino: Treino) {
     if (!mensagem) return;
-
+ 
     const nova = {
       texto: mensagem,
       autor: perfil?.tipo === "professor" ? "Professor" : perfil?.nome || "Aluno",
       data: new Date().toLocaleString(),
     };
-
+ 
     await setDoc(
       doc(db, "treinos", treino.id),
       {
@@ -1064,36 +1315,36 @@ void migrarDadosSemPerder;
       },
       { merge: true }
     );
-
+ 
     setMensagem("");
     carregarTudo();
   }
-
+ 
   async function solicitarNotificacoes() {
     if (typeof Notification === "undefined") return;
-
+ 
     const permissao = await Notification.requestPermission();
     setNotificacoes(permissao);
   }
-
+ 
   function enviarNotificacao(titulo: string, corpo: string) {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       new Notification(titulo, { body: corpo, icon: "/icon-192.png" });
     }
   }
-
+ 
   function iniciarDescanso(segundos: number, info = "Descanso") {
     setTimerInfo(info);
     setTempoRestante(segundos);
     setTimerAtivo(true);
   }
-
+ 
   function tocarSomProfissional() {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AudioCtx();
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
-
+ 
     oscillator.connect(gain);
     gain.connect(ctx.destination);
     oscillator.frequency.value = 880;
@@ -1103,52 +1354,52 @@ void migrarDadosSemPerder;
     oscillator.start(ctx.currentTime);
     oscillator.stop(ctx.currentTime + 0.55);
   }
-
+ 
   async function moverExercicio(treino: Treino, destinoId: string) {
     if (!dragExercicioId || dragExercicioId === destinoId) return;
-
+ 
     const lista = [...(treino.exercicios || [])].sort(
       (a, b) => (a.ordem || 0) - (b.ordem || 0)
     );
-
+ 
     const origemIndex = lista.findIndex((e) => e.id === dragExercicioId);
     const destinoIndex = lista.findIndex((e) => e.id === destinoId);
-
+ 
     if (origemIndex < 0 || destinoIndex < 0) return;
-
+ 
     const [removido] = lista.splice(origemIndex, 1);
     lista.splice(destinoIndex, 0, removido);
-
+ 
     setDragExercicioId("");
     await salvarExercicios(treino, lista);
   }
-
+ 
   function lerImagemLocal(e: any, callback: (valor: string) => void) {
     const file = e.target.files?.[0];
-
+ 
     if (!file) return;
-
+ 
     const reader = new FileReader();
-
+ 
     reader.onloadend = () => {
       callback(String(reader.result));
     };
-
+ 
     reader.readAsDataURL(file);
   }
-
+ 
   function alterarNomeTreinoLocal(treinoId: string, novoNome: string) {
     setTreinos((prev) =>
       prev.map((t) => (t.id === treinoId ? { ...t, nome: novoNome } : t))
     );
   }
-
+ 
   async function salvarNomeTreino(treino: Treino) {
     if (!treino.nome.trim()) {
       alert("Digite o nome do treino.");
       return;
     }
-
+ 
     await setDoc(
       doc(db, "treinos", treino.id),
       {
@@ -1157,31 +1408,33 @@ void migrarDadosSemPerder;
       },
       { merge: true }
     );
-
+ 
+    await salvarModeloAutomaticoDoTreino(treino);
+ 
     alert("Nome do treino salvo!");
     carregarTudo();
   }
-
+ 
   function progressoAluno(aluno: Aluno) {
     const treinosAluno = treinos.filter(
       (treino) => treino.alunoId === aluno.id || treino.alunoEmail === aluno.email
     );
-
+ 
     const totalExercicios = treinosAluno.reduce(
       (total, treino) => total + (treino.exercicios?.length || 0),
       0
     );
-
+ 
     const concluidos = treinosAluno.reduce(
       (total, treino) =>
         total + (treino.exercicios || []).filter((exercicio) => exercicio.finalizado).length,
       0
     );
-
+ 
     const progresso = totalExercicios
       ? Math.round((concluidos / totalExercicios) * 100)
       : 0;
-
+ 
     return {
       treinos: treinosAluno.length,
       totalExercicios,
@@ -1189,13 +1442,13 @@ void migrarDadosSemPerder;
       progresso,
     };
   }
-
-
+ 
+ 
   function alunoDashboard(aluno: Aluno) {
     const treinosAluno = treinos.filter(
       (treino) => treino.alunoId === aluno.id || treino.alunoEmail === aluno.email
     );
-
+ 
     const exercicios = treinosAluno.flatMap((treino) =>
       (treino.exercicios || []).map((exercicio) => ({
         ...exercicio,
@@ -1203,11 +1456,11 @@ void migrarDadosSemPerder;
         treinoData: treino.dataTreino || "",
       }))
     );
-
+ 
     const totalExercicios = exercicios.length;
     const concluidos = exercicios.filter((exercicio) => exercicio.finalizado).length;
     const progresso = totalExercicios ? Math.round((concluidos / totalExercicios) * 100) : 0;
-
+ 
     const cargas = exercicios.flatMap((exercicio) =>
       (exercicio.historicoCargas || []).map((item) => ({
         exercicio: exercicio.nome,
@@ -1216,7 +1469,7 @@ void migrarDadosSemPerder;
         data: item.data,
       }))
     );
-
+ 
     const timeline = [
       ...treinosAluno.map((treino) => ({
         data: treino.dataTreino || "Sem data",
@@ -1237,7 +1490,7 @@ void migrarDadosSemPerder;
         detalhe: `Peso ${avaliacao.peso || "-"} kg | Gordura ${avaliacao.gordura || "-"}% | Massa magra ${avaliacao.massaMagra || "-"} kg | Cintura ${avaliacao.cintura || "-"} cm`,
       })),
     ];
-
+ 
     return {
       treinosAluno,
       exercicios,
@@ -1249,46 +1502,46 @@ void migrarDadosSemPerder;
       avaliacoes: aluno.avaliacoes || [],
     };
   }
-
+ 
   function calcularIMC(peso: string, altura: string) {
     const p = Number(String(peso).replace(",", "."));
     let a = Number(String(altura).replace(",", "."));
-
+ 
     if (!p || !a) return "";
-
+ 
     if (a > 3) a = a / 100;
-
+ 
     return (p / (a * a)).toFixed(1);
   }
-
+ 
   function atualizarAvaliacao(campo: keyof AvaliacaoFisica, valor: string) {
     const novo = {
       ...avaliacaoDraft,
       [campo]: valor,
     };
-
+ 
     if (campo === "peso" || campo === "altura") {
       novo.imc = calcularIMC(
         campo === "peso" ? valor : novo.peso,
         campo === "altura" ? valor : novo.altura
       );
     }
-
+ 
     setAvaliacaoDraft(novo);
   }
-
+ 
   async function salvarAvaliacaoAluno(aluno: Aluno) {
     const nova: AvaliacaoFisica = {
       ...avaliacaoDraft,
       id: avaliacaoDraft.id || uid(),
       data: avaliacaoDraft.data || new Date().toISOString().slice(0, 10),
     };
-
+ 
     const avaliacoes = [
       nova,
       ...(aluno.avaliacoes || []).filter((a) => a.id !== nova.id),
     ];
-
+ 
     await setDoc(
       doc(db, "alunos", aluno.id),
       {
@@ -1297,18 +1550,18 @@ void migrarDadosSemPerder;
       },
       { merge: true }
     );
-
+ 
     setAvaliacaoDraft(avaliacaoVazia());
-
+ 
     alert("Avaliação salva.");
     carregarTudo();
   }
-
+ 
   async function excluirAvaliacaoAluno(aluno: Aluno, avaliacaoId: string) {
     if (!confirm("Excluir esta avaliação?")) return;
-
+ 
     const avaliacoes = (aluno.avaliacoes || []).filter((a) => a.id !== avaliacaoId);
-
+ 
     await setDoc(
       doc(db, "alunos", aluno.id),
       {
@@ -1317,25 +1570,25 @@ void migrarDadosSemPerder;
       },
       { merge: true }
     );
-
+ 
     carregarTudo();
   }
-
+ 
   function editarAvaliacao(avaliacao: AvaliacaoFisica) {
     setAvaliacaoDraft(avaliacao);
   }
-
+ 
   async function trocarSenhaPrimeiroAcesso() {
     if (novaSenhaPrimeiroAcesso.length < 6) {
       alert("A nova senha precisa ter no mínimo 6 caracteres.");
       return;
     }
-
+ 
     if (!auth.currentUser || !perfil) return;
-
+ 
     try {
       await updatePassword(auth.currentUser, novaSenhaPrimeiroAcesso);
-
+ 
       await setDoc(
         doc(db, "usuarios", perfil.uid),
         {
@@ -1344,7 +1597,7 @@ void migrarDadosSemPerder;
         },
         { merge: true }
       );
-
+ 
       setPerfil({ ...perfil, primeiroAcesso: false });
       setNovaSenhaPrimeiroAcesso("");
       alert("Senha alterada com sucesso.");
@@ -1352,13 +1605,13 @@ void migrarDadosSemPerder;
       alert(traduzErro(error.message));
     }
   }
-
+ 
   if (!usuario) {
     return (
       <Page>
         <Card compacto>
           <h1 style={styles.center}>EvoTrain</h1>
-
+ 
           <div style={styles.contatoBox}>
             <b>{configSistema.textoContato}</b>
             <p style={{ margin: "8px 0" }}>
@@ -1378,14 +1631,14 @@ void migrarDadosSemPerder;
               </a>
             </p>
           </div>
-
+ 
           <input
             style={styles.input}
             placeholder="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-
+ 
           <input
             style={styles.input}
             placeholder="Senha"
@@ -1393,19 +1646,19 @@ void migrarDadosSemPerder;
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
           />
-
+ 
           <button style={styles.primary} onClick={entrar}>
             Entrar
           </button>
-
+ 
           <button style={styles.secondary} onClick={cadastrar}>
             Solicitar conta de professor
           </button>
-
+ 
           <button style={styles.secondary} onClick={recuperarSenha}>
             Recuperar senha
           </button>
-
+ 
           <p style={{ fontSize: 13 }}>
             Aluno não cria conta. O professor cria o acesso do aluno com senha provisória.
           </p>
@@ -1413,7 +1666,7 @@ void migrarDadosSemPerder;
       </Page>
     );
   }
-
+ 
   if (perfil?.tipo === "professor" && perfil.status === "pendente") {
     return (
       <Page>
@@ -1428,7 +1681,7 @@ void migrarDadosSemPerder;
       </Page>
     );
   }
-
+ 
   if (perfil?.status === "bloqueado") {
     return (
       <Page>
@@ -1443,7 +1696,7 @@ void migrarDadosSemPerder;
       </Page>
     );
   }
-
+ 
   if (perfil?.tipo === "aluno" && perfil.primeiroAcesso) {
     return (
       <Page>
@@ -1451,7 +1704,7 @@ void migrarDadosSemPerder;
           <h1 style={styles.center}>EvoTrain</h1>
           <h2>Troque sua senha</h2>
           <p>Por segurança, troque a senha provisória antes de continuar.</p>
-
+ 
           <input
             style={styles.input}
             placeholder="Nova senha"
@@ -1459,11 +1712,11 @@ void migrarDadosSemPerder;
             value={novaSenhaPrimeiroAcesso}
             onChange={(e) => setNovaSenhaPrimeiroAcesso(e.target.value)}
           />
-
+ 
           <button style={styles.primary} onClick={trocarSenhaPrimeiroAcesso}>
             Salvar nova senha
           </button>
-
+ 
           <button style={styles.danger} onClick={sair}>
             Sair
           </button>
@@ -1471,7 +1724,7 @@ void migrarDadosSemPerder;
       </Page>
     );
   }
-
+ 
   return (
     <Page>
       <div style={styles.topbar}>
@@ -1479,18 +1732,18 @@ void migrarDadosSemPerder;
           <h1 style={{ margin: 0 }}>EvoTrain</h1>
           <small>{online ? "Online" : "Offline - dados em cache/sincronização"}</small>
         </div>
-
+ 
         <div>
           <button style={styles.secondary} onClick={solicitarNotificacoes}>
             Notificações: {notificacoes}
           </button>
-
+ 
           <button style={styles.danger} onClick={sair}>
             Sair
           </button>
         </div>
       </div>
-
+ 
       {timerAtivo && (
         <div style={styles.timerFixo}>
           <b>{timerInfo}</b> - {formatarTempo(tempoRestante)}
@@ -1499,10 +1752,10 @@ void migrarDadosSemPerder;
           </button>
         </div>
       )}
-
+ 
       <Card>
         <h2>Meu perfil</h2>
-
+ 
         <input
           style={styles.input}
           placeholder="Nome"
@@ -1511,9 +1764,9 @@ void migrarDadosSemPerder;
             setPerfil({ ...(perfil as Perfil), nome: e.target.value })
           }
         />
-
+ 
         <label style={styles.label}>Foto do perfil</label>
-
+ 
         <input
           style={styles.input}
           type="file"
@@ -1524,11 +1777,11 @@ void migrarDadosSemPerder;
             )
           }
         />
-
+ 
         {perfil?.foto && (
           <img src={perfil.foto} alt="Foto do perfil" style={styles.fotoPreview} />
         )}
-
+ 
         {perfil?.tipo === "professor" && (
           <>
             <input
@@ -1539,7 +1792,7 @@ void migrarDadosSemPerder;
                 setPerfil({ ...(perfil as Perfil), formacao: e.target.value })
               }
             />
-
+ 
             <input
               style={styles.input}
               placeholder="Especialidade"
@@ -1551,7 +1804,7 @@ void migrarDadosSemPerder;
                 })
               }
             />
-
+ 
             <input
               style={styles.input}
               placeholder="CREF"
@@ -1560,7 +1813,7 @@ void migrarDadosSemPerder;
                 setPerfil({ ...(perfil as Perfil), cref: e.target.value })
               }
             />
-
+ 
             <textarea
               style={styles.input}
               placeholder="Descrição profissional"
@@ -1571,20 +1824,28 @@ void migrarDadosSemPerder;
             />
           </>
         )}
-
+ 
         <button style={styles.primary} onClick={salvarPerfil}>
           Salvar perfil
         </button>
       </Card>
-
+ 
       {isAdmin && (
         <Card>
           <h2>Administração</h2>
           <p>Aprovar, bloquear e acompanhar professores cadastrados.</p>
-
+ 
+          <button style={styles.secondary} onClick={migrarDadosSemPerder}>
+            Atualizar estrutura sem apagar dados
+          </button>
+ 
+          <p style={{ fontSize: 13, color: "#475569" }}>
+            Use este botão depois de atualizar. Ele preserva alunos, treinos, cargas, mensagens e avaliações antigas.
+          </p>
+ 
           <div style={styles.configBox}>
             <h3>Contato da tela inicial</h3>
-
+ 
             <label style={styles.label}>Texto</label>
             <input
               style={styles.input}
@@ -1596,7 +1857,7 @@ void migrarDadosSemPerder;
                 })
               }
             />
-
+ 
             <label style={styles.label}>WhatsApp</label>
             <input
               style={styles.input}
@@ -1608,7 +1869,7 @@ void migrarDadosSemPerder;
                 })
               }
             />
-
+ 
             <label style={styles.label}>E-mail</label>
             <input
               style={styles.input}
@@ -1620,18 +1881,18 @@ void migrarDadosSemPerder;
                 })
               }
             />
-
+ 
             <button style={styles.primary} onClick={salvarConfigSistema}>
               Salvar contato
             </button>
           </div>
-
+ 
           <h3>Professores pendentes</h3>
-
+ 
           {usuariosSistema.filter(
             (u) => u.tipo === "professor" && u.status === "pendente"
           ).length === 0 && <p>Nenhuma solicitação pendente.</p>}
-
+ 
           {usuariosSistema
             .filter((u) => u.tipo === "professor" && u.status === "pendente")
             .map((professor) => (
@@ -1640,14 +1901,14 @@ void migrarDadosSemPerder;
                 <br />
                 <small>{professor.email}</small>
                 <br />
-
+ 
                 <button
                   style={styles.success}
                   onClick={() => aprovarProfessor(professor)}
                 >
                   Aprovar professor
                 </button>
-
+ 
                 <button
                   style={styles.danger}
                   onClick={() => bloquearProfessor(professor)}
@@ -1656,9 +1917,9 @@ void migrarDadosSemPerder;
                 </button>
               </div>
             ))}
-
+ 
           <h3>Professores aprovados/bloqueados</h3>
-
+ 
           {usuariosSistema
             .filter((u) => u.tipo === "professor" && u.status !== "pendente")
             .map((professor) => (
@@ -1667,7 +1928,7 @@ void migrarDadosSemPerder;
                 <br />
                 <small>{professor.email}</small>
                 <p>Status: {professor.status || "aprovado"}</p>
-
+ 
                 <button
                   style={styles.danger}
                   onClick={() => bloquearProfessor(professor)}
@@ -1678,26 +1939,26 @@ void migrarDadosSemPerder;
             ))}
         </Card>
       )}
-
+ 
       {perfil?.tipo === "professor" && (
         <div style={styles.grid2}>
           <Card>
             <h2>Cadastrar aluno</h2>
-
+ 
             <input
               style={styles.input}
               placeholder="Nome do aluno"
               value={novoAlunoNome}
               onChange={(e) => setNovoAlunoNome(e.target.value)}
             />
-
+ 
             <input
               style={styles.input}
               placeholder="E-mail do aluno"
               value={novoAlunoEmail}
               onChange={(e) => setNovoAlunoEmail(e.target.value)}
             />
-
+ 
             <input
               style={styles.input}
               placeholder="Senha provisória"
@@ -1705,16 +1966,16 @@ void migrarDadosSemPerder;
               value={novoAlunoSenha}
               onChange={(e) => setNovoAlunoSenha(e.target.value)}
             />
-
+ 
             <label style={styles.label}>Foto do aluno</label>
-
+ 
             <input
               style={styles.input}
               type="file"
               accept="image/*"
               onChange={(e) => lerImagemLocal(e, (foto) => setNovoAlunoFoto(foto))}
             />
-
+ 
             {novoAlunoFoto && (
               <img
                 src={novoAlunoFoto}
@@ -1722,15 +1983,15 @@ void migrarDadosSemPerder;
                 style={styles.fotoPreview}
               />
             )}
-
+ 
             <button style={styles.primary} onClick={cadastrarAluno}>
               Cadastrar aluno
             </button>
           </Card>
-
+ 
           <Card>
             <h2>Criar treino</h2>
-
+ 
             <select
               style={styles.input}
               value={alunoSelecionado}
@@ -1746,30 +2007,51 @@ void migrarDadosSemPerder;
                 </option>
               ))}
             </select>
-
+ 
             <label style={styles.label}>Nome do treino</label>
-
+ 
             <input
               style={styles.input}
               placeholder="Ex.: Treino A, Pernas, Costas, Superior"
               value={nomeTreino}
               onChange={(e) => setNomeTreino(e.target.value)}
             />
-
+ 
             <input
               style={styles.input}
               type="date"
               value={dataTreino}
               onChange={(e) => setDataTreino(e.target.value)}
             />
-
+ 
             <button style={styles.primary} onClick={criarTreino}>
               Criar treino
+            </button>
+ 
+            <hr />
+            <h3>Reaproveitar treino salvo</h3>
+            <p>Escolha um modelo salvo e aplique para o aluno selecionado.</p>
+ 
+            <select
+              style={styles.input}
+              value={modeloSelecionadoId}
+              onChange={(e) => setModeloSelecionadoId(e.target.value)}
+            >
+              <option value="">Selecione um modelo salvo</option>
+              {modelosTreino.map((modelo) => (
+                <option key={modelo.id} value={modelo.id}>
+                  {modelo.nome} - {modelo.exercicios?.length || 0} exercícios
+                </option>
+              ))}
+            </select>
+ 
+            <button style={styles.success} onClick={criarTreinoAPartirModelo}>
+              Criar treino usando modelo
             </button>
           </Card>
         </div>
       )}
-
+ 
       {perfil?.tipo === "professor" && (
         <div style={styles.professorTabs}>
           <button
@@ -1778,16 +2060,88 @@ void migrarDadosSemPerder;
           >
             Treinos
           </button>
-
+ 
           <button
             style={abaProfessor === "alunos" ? styles.tabAtiva : styles.tab}
             onClick={() => setAbaProfessor("alunos")}
           >
             Gerenciar alunos
           </button>
+ 
+          <button
+            style={abaProfessor === "modelos" ? styles.tabAtiva : styles.tab}
+            onClick={() => setAbaProfessor("modelos")}
+          >
+            Modelos salvos
+          </button>
         </div>
       )}
-
+ 
+      {perfil?.tipo === "professor" && abaProfessor === "modelos" && (
+        <Card>
+          <h2>Biblioteca de treinos salvos</h2>
+          <p>
+            Todo treino criado pelo professor vira um modelo reutilizável. Você também pode editar, excluir ou aplicar o modelo para qualquer aluno.
+          </p>
+ 
+          <label style={styles.label}>Aluno que receberá o modelo</label>
+          <select
+            style={styles.input}
+            value={alunoSelecionado}
+            onChange={(e) => setAlunoSelecionado(e.target.value)}
+          >
+            <option value="">Selecione um aluno</option>
+            {alunos.map((aluno) => (
+              <option key={aluno.id} value={aluno.id}>
+                {aluno.nome} - {aluno.email}
+              </option>
+            ))}
+          </select>
+ 
+          <div style={styles.grid2}>
+            <div>
+              <h3>Criar modelo vazio</h3>
+              <input
+                style={styles.input}
+                placeholder="Nome do modelo. Ex.: Hipertrofia superior A"
+                value={nomeModelo}
+                onChange={(e) => setNomeModelo(e.target.value)}
+              />
+              <textarea
+                style={styles.input}
+                placeholder="Descrição do modelo"
+                value={descricaoModelo}
+                onChange={(e) => setDescricaoModelo(e.target.value)}
+              />
+              <button style={styles.primary} onClick={criarModeloVazio}>
+                Criar modelo vazio
+              </button>
+            </div>
+ 
+            <div>
+              <h3>Modelos disponíveis</h3>
+              {modelosTreino.length === 0 && <p>Nenhum modelo salvo ainda.</p>}
+              {modelosTreino.map((modelo) => (
+                <div key={modelo.id} style={styles.alunoCardGerenciar}>
+                  <b>{modelo.nome}</b>
+                  <p>{modelo.descricao || "Sem descrição"}</p>
+                  <p>{modelo.exercicios?.length || 0} exercícios cadastrados</p>
+                  <button style={styles.primary} onClick={() => aplicarModeloParaAluno(modelo)}>
+                    Aplicar para aluno selecionado
+                  </button>
+                  <button style={styles.secondary} onClick={() => editarModeloTreino(modelo)}>
+                    Editar modelo
+                  </button>
+                  <button style={styles.danger} onClick={() => excluirModeloTreino(modelo.id)}>
+                    Excluir modelo
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+ 
       {perfil?.tipo === "professor" && abaProfessor === "alunos" && (
         <Card>
           <div style={styles.treinoHeader}>
@@ -1795,18 +2149,18 @@ void migrarDadosSemPerder;
               <h2>Gerenciar alunos</h2>
               <p>Excluir alunos, editar e-mail e acompanhar progresso.</p>
             </div>
-
+ 
             <button style={styles.danger} onClick={zerarDadosProfessor}>
               Zerar banco deste professor
             </button>
           </div>
-
+ 
           {alunos.length === 0 && <p>Nenhum aluno cadastrado.</p>}
-
+ 
           <div style={styles.alunoGrid}>
             {alunos.map((aluno) => {
               const resumo = progressoAluno(aluno);
-
+ 
               return (
                 <div key={aluno.id} style={styles.alunoCardGerenciar}>
                   <div style={styles.alunoLinhaTopo}>
@@ -1818,13 +2172,13 @@ void migrarDadosSemPerder;
                           style={styles.alunoFotoMini}
                         />
                       )}
-
+ 
                       <div>
                         <h3 style={{ margin: 0 }}>{aluno.nome}</h3>
                         <small>{aluno.email}</small>
                       </div>
                     </div>
-
+ 
                     <div>
                       <button
                         style={styles.secondary}
@@ -1832,7 +2186,7 @@ void migrarDadosSemPerder;
                       >
                         Editar e-mail
                       </button>
-
+ 
                       <button
                         style={styles.danger}
                         onClick={() => excluirAluno(aluno)}
@@ -1841,17 +2195,17 @@ void migrarDadosSemPerder;
                       </button>
                     </div>
                   </div>
-
+ 
                   <p>
                     <b>Treinos:</b> {resumo.treinos}
                   </p>
-
+ 
                   <p>
                     <b>Exercícios:</b> {resumo.concluidos}/{resumo.totalExercicios}
                   </p>
-
+ 
                   <ProgressBar value={resumo.progresso} />
-
+ 
                   <button
                     style={styles.success}
                     onClick={() =>
@@ -1860,7 +2214,7 @@ void migrarDadosSemPerder;
                   >
                     {alunoDashId === aluno.id ? "Fechar dashboard" : "Abrir dashboard"}
                   </button>
-
+ 
                   <button
                     style={styles.primary}
                     onClick={() => {
@@ -1871,7 +2225,7 @@ void migrarDadosSemPerder;
                   >
                     Ver treinos deste aluno
                   </button>
-
+ 
                   {alunoDashId === aluno.id && (
                     <DashboardAluno
                       aluno={aluno}
@@ -1889,17 +2243,17 @@ void migrarDadosSemPerder;
           </div>
         </Card>
       )}
-
+ 
       {(perfil?.tipo !== "professor" || abaProfessor === "treinos") && (
         <>
           {perfil?.tipo === "professor" && (
             <Card>
               <h2>Selecionar aluno</h2>
-
+ 
               <p>
                 Escolha um aluno. Depois disso, aparecem somente os treinos desse aluno.
               </p>
-
+ 
               <select
                 style={styles.input}
                 value={alunoSelecionado}
@@ -1915,7 +2269,7 @@ void migrarDadosSemPerder;
                   </option>
                 ))}
               </select>
-
+ 
               {alunoSelecionadoObj && (
                 <div style={styles.alunoSelecionadoBox}>
                   <b>Aluno selecionado:</b> {alunoSelecionadoObj.nome}
@@ -1925,13 +2279,13 @@ void migrarDadosSemPerder;
               )}
             </Card>
           )}
-
+ 
           <h2 style={{ color: "white" }}>
             {perfil?.tipo === "professor" && alunoSelecionadoObj
               ? `Treinos de ${alunoSelecionadoObj.nome}`
               : "Treinos"}
           </h2>
-
+ 
           {perfil?.tipo === "professor" && !alunoSelecionadoObj && (
             <Card>
               <h3>Selecione um aluno</h3>
@@ -1941,11 +2295,11 @@ void migrarDadosSemPerder;
               </p>
             </Card>
           )}
-
+ 
           <div style={styles.treinoTabs}>
             {treinosOrdenados.map((t) => {
               const progresso = calcularProgresso(t);
-
+ 
               return (
                 <button
                   key={t.id}
@@ -1957,7 +2311,7 @@ void migrarDadosSemPerder;
               );
             })}
           </div>
-
+ 
           {treinosOrdenados
             .filter((t) => t.id === treinoAbertoId)
             .map((treino) => {
@@ -1965,7 +2319,7 @@ void migrarDadosSemPerder;
               const progresso = calcularProgresso(treino);
               const finalizado =
                 progresso === 100 && (treino.exercicios || []).length > 0;
-
+ 
               return (
                 <Card key={treino.id}>
                   <div style={styles.treinoHeader}>
@@ -1973,7 +2327,7 @@ void migrarDadosSemPerder;
                       {perfil?.tipo === "professor" ? (
                         <div>
                           <label style={styles.label}>Nome do treino</label>
-
+ 
                           <input
                             style={styles.input}
                             value={treino.nome}
@@ -1981,7 +2335,7 @@ void migrarDadosSemPerder;
                               alterarNomeTreinoLocal(treino.id, e.target.value)
                             }
                           />
-
+ 
                           <button
                             style={styles.secondary}
                             onClick={() => salvarNomeTreino(treino)}
@@ -1992,17 +2346,17 @@ void migrarDadosSemPerder;
                       ) : (
                         <h2>{treino.nome}</h2>
                       )}
-
+ 
                       <p>
                         <b>Aluno:</b> {treino.alunoNome} - {treino.alunoEmail}
                       </p>
-
+ 
                       {treino.dataTreino && (
                         <p>
                           <b>Data do treino:</b> {treino.dataTreino}
                         </p>
                       )}
-
+ 
                       <p>
                         <b>Ficha criada em:</b>{" "}
                         {formatarDataCriacaoTreino(treino.dataCriacao || treino.criadoEm)}
@@ -2011,7 +2365,7 @@ void migrarDadosSemPerder;
                         {calcularDiasFicha(treino.dataCriacao || treino.criadoEm)} dias
                       </p>
                     </div>
-
+ 
                     <div>
                       {perfil?.tipo === "professor" && (
                         <button
@@ -2021,14 +2375,23 @@ void migrarDadosSemPerder;
                           Criar novo exercício
                         </button>
                       )}
-
+ 
+                      {perfil?.tipo === "professor" && (
+                        <button
+                          style={styles.success}
+                          onClick={() => salvarTreinoComoModelo(treino)}
+                        >
+                          Salvar como modelo
+                        </button>
+                      )}
+ 
                       <button
                         style={styles.secondary}
                         onClick={() => reiniciarTreino(treino)}
                       >
                         Reiniciar treino
                       </button>
-
+ 
                       {perfil?.tipo === "professor" && (
                         <button
                           style={styles.danger}
@@ -2039,15 +2402,15 @@ void migrarDadosSemPerder;
                       )}
                     </div>
                   </div>
-
+ 
                   <ProgressBar value={progresso} />
-
+ 
                   {finalizado && (
                     <p style={styles.ok}>
                       Treino finalizado. Clique em reiniciar para repetir na semana.
                     </p>
                   )}
-
+ 
                   {perfil?.tipo === "professor" && novoExercicioDraft && (
                     <div
                       style={{
@@ -2057,40 +2420,40 @@ void migrarDadosSemPerder;
                       }}
                     >
                       <h3>Novo exercício</h3>
-
+ 
                       <p>
                         Preencha os campos e clique em salvar. Ele será adicionado
                         no topo do treino.
                       </p>
-
+ 
                       <Field
                         label="Nome do exercício"
                         disabled={false}
                         value={novoExercicioDraft.nome}
                         onChange={(v: any) => atualizarNovoExercicio("nome", v)}
                       />
-
+ 
                       <Field
                         label="Séries"
                         disabled={false}
                         value={novoExercicioDraft.series}
                         onChange={(v: any) => atualizarNovoExercicio("series", v)}
                       />
-
+ 
                       <Field
                         label="Repetições"
                         disabled={false}
                         value={novoExercicioDraft.repeticoes}
                         onChange={(v: any) => atualizarNovoExercicio("repeticoes", v)}
                       />
-
+ 
                       <Field
                         label="Descanso em segundos"
                         disabled={false}
                         value={novoExercicioDraft.descanso}
                         onChange={(v: any) => atualizarNovoExercicio("descanso", v)}
                       />
-
+ 
                       <Field
                         label="Carga sugerida"
                         disabled={false}
@@ -2099,14 +2462,14 @@ void migrarDadosSemPerder;
                           atualizarNovoExercicio("cargaSugerida", v)
                         }
                       />
-
+ 
                       <Field
                         label="Método"
                         disabled={false}
                         value={novoExercicioDraft.metodo}
                         onChange={(v: any) => atualizarNovoExercicio("metodo", v)}
                       />
-
+ 
                       <Field
                         label="Velocidade"
                         disabled={false}
@@ -2115,14 +2478,14 @@ void migrarDadosSemPerder;
                           atualizarNovoExercicio("velocidade", v)
                         }
                       />
-
+ 
                       <Field
                         label="Vídeo/GIF"
                         disabled={false}
                         value={novoExercicioDraft.video}
                         onChange={(v: any) => atualizarNovoExercicio("video", v)}
                       />
-
+ 
                       <Field
                         label="Observação professor"
                         disabled={false}
@@ -2131,14 +2494,14 @@ void migrarDadosSemPerder;
                           atualizarNovoExercicio("obsProfessor", v)
                         }
                       />
-
+ 
                       <button
                         style={styles.success}
                         onClick={() => salvarNovoExercicio(treino)}
                       >
                         Salvar novo exercício
                       </button>
-
+ 
                       <button
                         style={styles.secondary}
                         onClick={() => setNovoExercicioDraft(null)}
@@ -2147,10 +2510,10 @@ void migrarDadosSemPerder;
                       </button>
                     </div>
                   )}
-
+ 
                   {exerciciosOrdenados.map((ex) => {
                     const aberto = exercicioAbertoId === ex.id;
-
+ 
                     return (
                       <div
                         key={ex.id}
@@ -2159,27 +2522,32 @@ void migrarDadosSemPerder;
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => moverExercicio(treino, ex.id)}
                         style={{
-                          ...styles.exercise,
-                          opacity: ex.finalizado ? 0.55 : 1,
-                          background: ex.finalizado ? "#dcfce7" : "#f8fafc",
+                          ...(perfil?.tipo === "aluno" ? styles.alunoCardExercicio : styles.exercise),
+                          opacity: ex.finalizado ? 0.78 : 1,
+                          background: perfil?.tipo === "aluno"
+                            ? (ex.finalizado ? "#123524" : "#18243a")
+                            : (ex.finalizado ? "#dcfce7" : "#f8fafc"),
+                          border: perfil?.tipo === "aluno"
+                            ? (ex.finalizado ? "3px solid #22c55e" : "3px solid #334155")
+                            : "1px solid #cbd5e1",
                         }}
                       >
                         <div style={styles.exerciseHeader}>
                           <button
-                            style={styles.exerciseTitleButton}
+                            style={perfil?.tipo === "aluno" ? styles.alunoExercicioTituloBotao : styles.exerciseTitleButton}
                             onClick={() => setExercicioAbertoId(aberto ? "" : ex.id)}
                           >
                             {ex.finalizado ? "✅ " : "☐ "}
                             {ex.nome || "Exercício sem nome"}
                           </button>
-
+ 
                           <small>{aberto ? "Aberto" : "Minimizado"}</small>
                         </div>
-
+ 
                         {perfil?.tipo === "professor" && (
                           <small>Arraste para reordenar</small>
                         )}
-
+ 
                         {aberto && (
                           <>
                             <Field
@@ -2190,7 +2558,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "nome", v)
                               }
                             />
-
+ 
                             <Field
                               label="Séries"
                               disabled={perfil?.tipo !== "professor"}
@@ -2199,7 +2567,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "series", v)
                               }
                             />
-
+ 
                             <Field
                               label="Repetições"
                               disabled={perfil?.tipo !== "professor"}
@@ -2208,7 +2576,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "repeticoes", v)
                               }
                             />
-
+ 
                             <Field
                               label="Descanso em segundos"
                               disabled={perfil?.tipo !== "professor"}
@@ -2217,7 +2585,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "descanso", v)
                               }
                             />
-
+ 
                             <Field
                               label="Carga sugerida"
                               disabled={perfil?.tipo !== "professor"}
@@ -2226,7 +2594,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "cargaSugerida", v)
                               }
                             />
-
+ 
                             <Field
                               label="Método"
                               disabled={perfil?.tipo !== "professor"}
@@ -2235,7 +2603,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "metodo", v)
                               }
                             />
-
+ 
                             <Field
                               label="Velocidade"
                               disabled={perfil?.tipo !== "professor"}
@@ -2244,7 +2612,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "velocidade", v)
                               }
                             />
-
+ 
                             <Field
                               label="Vídeo/GIF"
                               disabled={perfil?.tipo !== "professor"}
@@ -2253,7 +2621,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "video", v)
                               }
                             />
-
+ 
                             <Field
                               label="Carga usada pelo aluno"
                               disabled={perfil?.tipo !== "aluno"}
@@ -2262,7 +2630,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "cargaAtual", v)
                               }
                             />
-
+ 
                             <Field
                               label="Observação professor"
                               disabled={perfil?.tipo !== "professor"}
@@ -2271,7 +2639,7 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "obsProfessor", v)
                               }
                             />
-
+ 
                             <Field
                               label="Observação aluno"
                               disabled={perfil?.tipo !== "aluno"}
@@ -2280,47 +2648,65 @@ void migrarDadosSemPerder;
                                 atualizarExercicio(treino, ex.id, "obsAluno", v)
                               }
                             />
-
+ 
                             {ex.video && (
                               <a href={ex.video} target="_blank" rel="noreferrer">
                                 Ver vídeo
                               </a>
                             )}
-
+ 
                             {perfil?.tipo === "aluno" && (
                               <>
-                                <h4>Séries</h4>
-
+                                {ex.video ? (
+                                  <img
+                                    src={ex.video}
+                                    alt={ex.nome || "Exercício"}
+                                    style={styles.alunoImagemExercicio}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <div style={styles.alunoSemGif}>Sem GIF disponível</div>
+                                )}
+ 
+                                <div style={styles.alunoInfoGrid}>
+                                  <div style={styles.alunoInfoPill}>Séries: {ex.series || "-"}</div>
+                                  <div style={styles.alunoInfoPill}>Feitas: {(ex.seriesConcluidas || []).length}/{Number(ex.series) || 0}</div>
+                                  <div style={styles.alunoInfoPill}>Reps: {ex.repeticoes || "-"}</div>
+                                  <div style={styles.alunoInfoPill}>Intervalo: {ex.descanso || "-"}s</div>
+                                  <div style={styles.alunoInfoPill}>Carga sugerida: {ex.cargaSugerida || "-"}</div>
+                                  <div style={styles.alunoInfoPill}>Método: {ex.metodo || "-"}</div>
+                                  <div style={styles.alunoInfoPill}>Velocidade: {ex.velocidade || "-"}</div>
+                                  <div style={styles.alunoInfoPill}>Status: {ex.finalizado ? "Concluído" : "Pendente"}</div>
+                                </div>
+ 
+                                <h4 style={{ color: "white" }}>Séries</h4>
+ 
                                 {Array.from(
                                   { length: Number(ex.series) || 0 },
                                   (_, i) => i + 1
                                 ).map((s) => (
                                   <button
                                     key={s}
-                                    style={{
-                                      ...styles.secondary,
-                                      background: ex.seriesConcluidas?.includes(s)
-                                        ? "#86efac"
-                                        : "#e2e8f0",
-                                      color: "#0f172a",
-                                    }}
+                                    style={ex.seriesConcluidas?.includes(s) ? styles.alunoBotaoVerde : styles.alunoBotaoAzul}
                                     onClick={() => marcarSerie(treino, ex, s)}
                                   >
-                                    Série {s}
+                                    {ex.seriesConcluidas?.includes(s) ? "✓" : "+"} Série {s} / iniciar descanso
                                   </button>
                                 ))}
-
+ 
                                 <button
-                                  style={styles.success}
+                                  style={styles.alunoBotaoVerde}
                                   onClick={() => finalizarExercicio(treino, ex)}
                                 >
-                                  Finalizar exercício
+                                  ✓ Finalizar exercício
                                 </button>
-
+ 
                                 <GraficoCarga historico={ex.historicoCargas || []} />
                               </>
                             )}
-
+ 
                             {perfil?.tipo === "professor" && (
                               <>
                                 <button
@@ -2332,14 +2718,14 @@ void migrarDadosSemPerder;
                                 >
                                   Salvar exercício
                                 </button>
-
+ 
                                 <button
                                   style={styles.danger}
                                   onClick={() => excluirExercicio(treino, ex.id)}
                                 >
                                   Excluir exercício
                                 </button>
-
+ 
                                 <GraficoCarga historico={ex.historicoCargas || []} />
                               </>
                             )}
@@ -2348,23 +2734,23 @@ void migrarDadosSemPerder;
                       </div>
                     );
                   })}
-
+ 
                   <div style={styles.messages}>
                     <h3>Mensagens</h3>
-
+ 
                     {(treino.mensagens || []).map((m, i) => (
                       <p key={i}>
                         <b>{m.autor}:</b> {m.texto} <small>{m.data}</small>
                       </p>
                     ))}
-
+ 
                     <input
                       style={styles.input}
                       placeholder="Mensagem"
                       value={mensagem}
                       onChange={(e) => setMensagem(e.target.value)}
                     />
-
+ 
                     <button style={styles.primary} onClick={() => enviarMensagem(treino)}>
                       Enviar
                     </button>
@@ -2377,35 +2763,35 @@ void migrarDadosSemPerder;
     </Page>
   );
 }
-
+ 
 function ordenarExercicios(exercicios: Exercicio[]) {
   const lista = [...exercicios].sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-
+ 
   return [
     ...lista.filter((e) => !e.finalizado),
     ...lista.filter((e) => e.finalizado),
   ];
 }
-
+ 
 function calcularProgresso(treino: Treino) {
   const total = treino.exercicios?.length || 0;
-
+ 
   if (!total) return 0;
-
+ 
   const feitos = treino.exercicios.filter((e) => e.finalizado).length;
   return (feitos / total) * 100;
 }
-
+ 
 function formatarTempo(segundos: number) {
   const m = Math.floor(segundos / 60).toString().padStart(2, "0");
   const s = (segundos % 60).toString().padStart(2, "0");
-
+ 
   return `${m}:${s}`;
 }
-
+ 
 function formatarDataCriacaoTreino(valor: any) {
   if (!valor) return "Não informado";
-
+ 
   try {
     if (typeof valor === "string") return new Date(valor).toLocaleDateString();
     if (valor?.seconds) return new Date(valor.seconds * 1000).toLocaleDateString();
@@ -2414,10 +2800,10 @@ function formatarDataCriacaoTreino(valor: any) {
     return "Não informado";
   }
 }
-
+ 
 function calcularDiasFicha(valor: any) {
   if (!valor) return 0;
-
+ 
   try {
     const data =
       typeof valor === "string"
@@ -2425,13 +2811,13 @@ function calcularDiasFicha(valor: any) {
         : valor?.seconds
           ? new Date(valor.seconds * 1000)
           : new Date(valor);
-
+ 
     return Math.max(0, Math.floor((Date.now() - data.getTime()) / (1000 * 60 * 60 * 24)));
   } catch {
     return 0;
   }
 }
-
+ 
 function traduzErro(msg: string) {
   if (msg.includes("EMAIL_EXISTS")) return "Esse e-mail já está cadastrado.";
   if (msg.includes("auth/invalid-email")) return "E-mail inválido.";
@@ -2441,10 +2827,10 @@ function traduzErro(msg: string) {
   if (msg.includes("auth/requires-recent-login")) {
     return "Por segurança, saia e entre novamente antes de trocar a senha.";
   }
-
+ 
   return msg;
 }
-
+ 
 function Page({ children }: any) {
   return (
     <div style={styles.page}>
@@ -2452,11 +2838,11 @@ function Page({ children }: any) {
     </div>
   );
 }
-
+ 
 function Card({ children, compacto }: any) {
   return <div style={compacto ? styles.cardCompacto : styles.card}>{children}</div>;
 }
-
+ 
 function Field({ label, value, onChange, disabled }: any) {
   return (
     <label style={styles.label}>
@@ -2470,26 +2856,26 @@ function Field({ label, value, onChange, disabled }: any) {
     </label>
   );
 }
-
+ 
 function ProgressBar({ value }: any) {
   return (
     <div>
       <b>Progresso: {Math.round(value)}%</b>
-
+ 
       <div style={styles.progressBg}>
         <div style={{ ...styles.progressFill, width: `${value}%` }} />
       </div>
     </div>
   );
 }
-
+ 
 function GraficoCarga({ historico }: any) {
   const pontos = (historico || [])
     .map((h: any) =>
       Number(String(h.carga).replace(",", ".").replace(/[^0-9.]/g, ""))
     )
     .filter((n: number) => !isNaN(n));
-
+ 
   if (pontos.length < 2) {
     return (
       <p>
@@ -2497,11 +2883,11 @@ function GraficoCarga({ historico }: any) {
       </p>
     );
   }
-
+ 
   const max = Math.max(...pontos);
   const min = Math.min(...pontos);
   const range = max - min || 1;
-
+ 
   const coords = pontos
     .map((p: number, i: number) => {
       const x = (i / (pontos.length - 1)) * 260;
@@ -2509,26 +2895,26 @@ function GraficoCarga({ historico }: any) {
       return `${x},${y}`;
     })
     .join(" ");
-
+ 
   return (
     <div style={styles.chartBox}>
       <b>Evolução de carga</b>
-
+ 
       <svg width="280" height="110" viewBox="0 0 280 110">
         <polyline fill="none" stroke="#2563eb" strokeWidth="4" points={coords} />
-
+ 
         {pontos.map((p: number, i: number) => {
           const x = (i / (pontos.length - 1)) * 260;
           const y = 90 - ((p - min) / range) * 80;
-
+ 
           return <circle key={i} cx={x} cy={y} r="4" fill="#16a34a" />;
         })}
       </svg>
     </div>
   );
 }
-
-
+ 
+ 
 function DashboardAluno({
   aluno,
   dados,
@@ -2539,11 +2925,11 @@ function DashboardAluno({
   excluirAvaliacaoAluno,
 }: any) {
   const ultima = dados.avaliacoes?.[0];
-
+ 
   return (
     <div style={styles.dashboardAluno}>
       <h3>Dashboard do aluno</h3>
-
+ 
       <div style={styles.kpiGrid}>
         <Kpi titulo="Progresso" valor={`${dados.progresso}%`} />
         <Kpi titulo="Treinos" valor={dados.treinosAluno.length} />
@@ -2553,14 +2939,14 @@ function DashboardAluno({
         <Kpi titulo="% Gordura" valor={ultima?.gordura ? `${ultima.gordura}%` : "-"} />
         <Kpi titulo="Massa magra" valor={ultima?.massaMagra ? `${ultima.massaMagra} kg` : "-"} />
       </div>
-
+ 
       <div style={styles.dashboardGrid}>
         <div style={styles.panel}>
           <h3>Avaliação física</h3>
-
+ 
           <label style={styles.label}>Data</label>
           <input style={styles.input} type="date" value={avaliacaoDraft.data} onChange={(e) => atualizarAvaliacao("data", e.target.value)} />
-
+ 
           <h4>Dados gerais</h4>
           <div style={styles.formGrid}>
             <CampoAvaliacao label="Peso kg" campo="peso" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
@@ -2569,7 +2955,7 @@ function DashboardAluno({
             <CampoAvaliacao label="% gordura" campo="gordura" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Massa magra kg" campo="massaMagra" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
           </div>
-
+ 
           <h4>Medidas centrais</h4>
           <div style={styles.formGrid}>
             <CampoAvaliacao label="Pescoço cm" campo="pescoco" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
@@ -2579,7 +2965,7 @@ function DashboardAluno({
             <CampoAvaliacao label="Abdômen cm" campo="abdomen" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Quadril cm" campo="quadril" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
           </div>
-
+ 
           <h4>Membros superiores</h4>
           <div style={styles.formGrid}>
             <CampoAvaliacao label="Bíceps direito cm" campo="bicepsDireito" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
@@ -2587,7 +2973,7 @@ function DashboardAluno({
             <CampoAvaliacao label="Antebraço direito cm" campo="antebracoDireito" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Antebraço esquerdo cm" campo="antebracoEsquerdo" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
           </div>
-
+ 
           <h4>Membros inferiores</h4>
           <div style={styles.formGrid}>
             <CampoAvaliacao label="Coxa direita cm" campo="coxaDireita" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
@@ -2595,7 +2981,7 @@ function DashboardAluno({
             <CampoAvaliacao label="Panturrilha direita cm" campo="panturrilhaDireita" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
             <CampoAvaliacao label="Panturrilha esquerda cm" campo="panturrilhaEsquerda" draft={avaliacaoDraft} atualizar={atualizarAvaliacao} />
           </div>
-
+ 
           <label style={styles.label}>Observações da avaliação</label>
           <textarea
             style={styles.input}
@@ -2603,12 +2989,12 @@ function DashboardAluno({
             onChange={(e) => atualizarAvaliacao("observacoes", e.target.value)}
             placeholder="Observações importantes da avaliação física"
           />
-
+ 
           <button style={styles.primary} onClick={() => salvarAvaliacaoAluno(aluno)}>
             Salvar avaliação
           </button>
         </div>
-
+ 
         <div style={styles.panel}>
           <h3>Evolução corporal</h3>
           <MiniGrafico
@@ -2634,13 +3020,13 @@ function DashboardAluno({
           <MiniGrafico titulo="Coxa esquerda" dados={dados.avaliacoes} campo="coxaEsquerda" sufixo="cm" />
         </div>
       </div>
-
+ 
       <div style={styles.dashboardGrid}>
         <div style={styles.panel}>
           <h3>Linha do tempo</h3>
-
+ 
           {dados.timeline.length === 0 && <p>Sem registros ainda.</p>}
-
+ 
           {dados.timeline.slice(0, 20).map((item: any, index: number) => (
             <div key={index} style={styles.timelineItem}>
               <b>{item.tipo}</b> - {item.titulo}
@@ -2650,12 +3036,12 @@ function DashboardAluno({
             </div>
           ))}
         </div>
-
+ 
         <div style={styles.panel}>
           <h3>Cargas registradas</h3>
-
+ 
           {dados.cargas.length === 0 && <p>Nenhuma carga registrada ainda.</p>}
-
+ 
           {dados.cargas.slice(0, 20).map((item: any, index: number) => (
             <div key={index} style={styles.timelineItem}>
               <b>{item.exercicio}</b>
@@ -2665,12 +3051,12 @@ function DashboardAluno({
           ))}
         </div>
       </div>
-
+ 
       <div style={styles.panel}>
         <h3>Histórico de avaliações</h3>
-
+ 
         {dados.avaliacoes.length === 0 && <p>Nenhuma avaliação salva.</p>}
-
+ 
         {dados.avaliacoes.map((avaliacao: any) => (
           <div key={avaliacao.id} style={styles.avaliacaoLinha}>
             <div>
@@ -2680,7 +3066,7 @@ function DashboardAluno({
               </p>
               {avaliacao.observacoes && <small>{avaliacao.observacoes}</small>}
             </div>
-
+ 
             <div>
               <button style={styles.secondary} onClick={() => editarAvaliacao(avaliacao)}>
                 Editar
@@ -2695,7 +3081,7 @@ function DashboardAluno({
     </div>
   );
 }
-
+ 
 function Kpi({ titulo, valor }: any) {
   return (
     <div style={styles.kpiCard}>
@@ -2704,7 +3090,7 @@ function Kpi({ titulo, valor }: any) {
     </div>
   );
 }
-
+ 
 function CampoAvaliacao({ label, campo, draft, atualizar }: any) {
   return (
     <label style={styles.label}>
@@ -2717,7 +3103,7 @@ function CampoAvaliacao({ label, campo, draft, atualizar }: any) {
     </label>
   );
 }
-
+ 
 function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
   const valores = [...(dados || [])]
     .reverse()
@@ -2726,7 +3112,7 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
       valor: Number(String(item[campo] || "").replace(",", ".")),
     }))
     .filter((item) => !isNaN(item.valor) && item.valor > 0);
-
+ 
   if (valores.length < 2) {
     return (
       <div style={styles.graficoCard}>
@@ -2735,11 +3121,11 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
       </div>
     );
   }
-
+ 
   const max = Math.max(...valores.map((v) => v.valor));
   const min = Math.min(...valores.map((v) => v.valor));
   const range = max - min || 1;
-
+ 
   const coords = valores
     .map((p, i) => {
       const x = (i / (valores.length - 1)) * 260;
@@ -2747,7 +3133,7 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
       return `${x},${y}`;
     })
     .join(" ");
-
+ 
   return (
     <div style={styles.graficoCard}>
       <b>{titulo}</b>
@@ -2765,7 +3151,7 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
     </div>
   );
 }
-
+ 
 const styles: any = {
   page: {
     minHeight: "100vh",
@@ -3076,4 +3462,155 @@ const styles: any = {
     border: "3px solid #2563eb",
     marginBottom: 10,
   },
+ 
+/* ===== VISUAL PREMIUM ALUNO - INÍCIO ===== */
+  alunoPagePremium: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg,#0b1224 0%,#111827 100%)",
+    padding: 18,
+    color: "#ffffff",
+  },
+  alunoHeaderPro: {
+    color: "#ffffff",
+    marginBottom: 22,
+  },
+  alunoTituloPro: {
+    color: "#ffffff",
+    fontSize: 34,
+    fontWeight: 800,
+    margin: 0,
+    lineHeight: 1.1,
+  },
+  alunoSubtituloPro: {
+    color: "#94a3b8",
+    fontSize: 17,
+    marginTop: 6,
+  },
+  selectTreinoAluno: {
+    width: "100%",
+    padding: 16,
+    borderRadius: 18,
+    border: "none",
+    background: "#f8fafc",
+    color: "#111827",
+    fontSize: 17,
+    marginBottom: 18,
+  },
+  alunoCardExercicio: {
+    background: "linear-gradient(180deg,#1e293b 0%,#111827 100%)",
+    padding: 20,
+    borderRadius: 28,
+    marginBottom: 24,
+    border: "3px solid #22c55e",
+    boxShadow: "0 14px 35px rgba(0,0,0,0.35)",
+    color: "#ffffff",
+  },
+  alunoExercicioTitulo: {
+    color: "#ffffff",
+    fontSize: 25,
+    fontWeight: 800,
+    marginBottom: 14,
+  },
+  alunoImagemExercicio: {
+    width: "100%",
+    maxHeight: 430,
+    objectFit: "contain",
+    borderRadius: 22,
+    background: "#fff",
+    marginTop: 12,
+    marginBottom: 16,
+    padding: 8,
+    boxSizing: "border-box",
+  },
+  alunoInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+    gap: 12,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  alunoInfoPill: {
+    background: "#020617",
+    color: "#ffffff",
+    borderRadius: 16,
+    padding: "13px 15px",
+    fontSize: 16,
+    border: "1px solid rgba(255,255,255,0.06)",
+  },
+  alunoCargaInput: {
+    width: "100%",
+    padding: 18,
+    borderRadius: 18,
+    border: "none",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 17,
+    marginTop: 8,
+    marginBottom: 18,
+    boxSizing: "border-box",
+  },
+  alunoBotaoAzul: {
+    width: "100%",
+    padding: "18px 20px",
+    marginTop: 12,
+    borderRadius: 18,
+    border: "none",
+    background: "linear-gradient(90deg,#3b82f6,#2563eb)",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontSize: 17,
+    boxShadow: "0 8px 18px rgba(37,99,235,0.28)",
+  },
+  alunoBotaoVerde: {
+    width: "100%",
+    padding: "18px 20px",
+    marginTop: 12,
+    borderRadius: 18,
+    border: "none",
+    background: "#22c55e",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontSize: 17,
+    boxShadow: "0 8px 18px rgba(34,197,94,0.25)",
+  },
+  alunoBotaoVermelho: {
+    width: "100%",
+    padding: "18px 20px",
+    marginTop: 12,
+    borderRadius: 18,
+    border: "none",
+    background: "#ef4444",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+    fontSize: 17,
+    boxShadow: "0 8px 18px rgba(239,68,68,0.25)",
+  },
+  alunoSemGif: {
+    background: "#020617",
+    color: "#ffffff",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    fontSize: 16,
+  },
+  alunoProgressoFundo: {
+    width: "100%",
+    height: 12,
+    background: "#334155",
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 16,
+    marginBottom: 22,
+  },
+  alunoProgressoBarra: {
+    height: "100%",
+    background: "linear-gradient(90deg,#22c55e,#3b82f6)",
+    borderRadius: 999,
+  },
+/* ===== VISUAL PREMIUM ALUNO - FIM ===== */
+ 
 };
+ 
