@@ -2486,7 +2486,7 @@ export default function App() {
                         onChange={(v: any) => atualizarNovoExercicio("video", v)}
                       />
  
-                      <Field
+                      <TextAreaField
                         label="Observação professor"
                         disabled={false}
                         value={novoExercicioDraft.obsProfessor}
@@ -2550,139 +2550,196 @@ export default function App() {
  
                         {aberto && (
                           <>
-                            <Field
-                              label="Nome do exercício"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.nome}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "nome", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Séries"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.series}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "series", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Repetições"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.repeticoes}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "repeticoes", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Descanso em segundos"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.descanso}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "descanso", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Carga sugerida"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.cargaSugerida}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "cargaSugerida", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Método"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.metodo}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "metodo", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Velocidade"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.velocidade}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "velocidade", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Vídeo/GIF"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.video}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "video", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Carga usada pelo aluno"
-                              disabled={perfil?.tipo !== "aluno"}
-                              value={ex.cargaAtual}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "cargaAtual", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Observação professor"
-                              disabled={perfil?.tipo !== "professor"}
-                              value={ex.obsProfessor}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "obsProfessor", v)
-                              }
-                            />
- 
-                            <Field
-                              label="Observação aluno"
-                              disabled={perfil?.tipo !== "aluno"}
-                              value={ex.obsAluno}
-                              onChange={(v: any) =>
-                                atualizarExercicio(treino, ex.id, "obsAluno", v)
-                              }
-                            />
- 
-                            {ex.video && (
-                              <a href={ex.video} target="_blank" rel="noreferrer">
-                                Ver vídeo
-                              </a>
+                            {perfil?.tipo === "professor" && (
+                              <>
+                                <Field
+                                  label="Nome do exercício"
+                                  disabled={false}
+                                  value={ex.nome}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "nome", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Séries"
+                                  disabled={false}
+                                  value={ex.series}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "series", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Repetições"
+                                  disabled={false}
+                                  value={ex.repeticoes}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "repeticoes", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Descanso em segundos"
+                                  disabled={false}
+                                  value={ex.descanso}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "descanso", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Carga sugerida"
+                                  disabled={false}
+                                  value={ex.cargaSugerida}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "cargaSugerida", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Método"
+                                  disabled={false}
+                                  value={ex.metodo}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "metodo", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Velocidade"
+                                  disabled={false}
+                                  value={ex.velocidade}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "velocidade", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Vídeo/GIF"
+                                  disabled={false}
+                                  value={ex.video}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "video", v)
+                                  }
+                                />
+
+                                <Field
+                                  label="Carga usada pelo aluno"
+                                  disabled={true}
+                                  value={ex.cargaAtual}
+                                  onChange={() => {}}
+                                />
+
+                                <TextAreaField
+                                  label="Observação professor"
+                                  disabled={false}
+                                  value={ex.obsProfessor}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "obsProfessor", v)
+                                  }
+                                />
+
+                                <TextAreaField
+                                  label="Observação aluno"
+                                  disabled={false}
+                                  value={ex.obsAluno}
+                                  onChange={(v: any) =>
+                                    atualizarExercicio(treino, ex.id, "obsAluno", v)
+                                  }
+                                />
+
+                                {ex.video && (
+                                  <a href={ex.video} target="_blank" rel="noreferrer">
+                                    Ver vídeo
+                                  </a>
+                                )}
+
+                                <button
+                                  style={styles.success}
+                                  onClick={() => {
+                                    setExercicioAbertoId("");
+                                    alert("Exercício salvo e minimizado!");
+                                  }}
+                                >
+                                  Salvar exercício
+                                </button>
+
+                                <button
+                                  style={styles.danger}
+                                  onClick={() => excluirExercicio(treino, ex.id)}
+                                >
+                                  Excluir exercício
+                                </button>
+
+                                <GraficoCarga historico={ex.historicoCargas || []} />
+                              </>
                             )}
- 
+
                             {perfil?.tipo === "aluno" && (
                               <>
                                 {ex.video ? (
-                                  <img
-                                    src={ex.video}
-                                    alt={ex.nome || "Exercício"}
-                                    style={styles.alunoImagemExercicio}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = "none";
-                                    }}
-                                  />
+                                  <>
+                                    <a
+                                      href={ex.video}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={styles.alunoVideoLink}
+                                    >
+                                      Abrir vídeo/GIF do exercício
+                                    </a>
+
+                                    <img
+                                      src={ex.video}
+                                      alt={ex.nome || "Exercício"}
+                                      style={styles.alunoImagemExercicio}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                      }}
+                                    />
+                                  </>
                                 ) : (
-                                  <div style={styles.alunoSemGif}>Sem GIF disponível</div>
+                                  <div style={styles.alunoSemGif}>Sem vídeo/GIF disponível</div>
                                 )}
- 
-                                <div style={styles.alunoInfoGrid}>
+
+                                {ex.obsProfessor && (
+                                  <div style={styles.alunoObservacaoProfessor}>
+                                    <b>Observação do professor</b>
+                                    <p style={styles.textoQuebraLinha}>{ex.obsProfessor}</p>
+                                  </div>
+                                )}
+
+                                <div style={styles.alunoInfoGridLimpo}>
                                   <div style={styles.alunoInfoPill}>Séries: {ex.series || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Feitas: {(ex.seriesConcluidas || []).length}/{Number(ex.series) || 0}</div>
                                   <div style={styles.alunoInfoPill}>Reps: {ex.repeticoes || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Intervalo: {ex.descanso || "-"}s</div>
-                                  <div style={styles.alunoInfoPill}>Carga sugerida: {ex.cargaSugerida || "-"}</div>
-                                  <div style={styles.alunoInfoPill}>Método: {ex.metodo || "-"}</div>
-                                  <div style={styles.alunoInfoPill}>Velocidade: {ex.velocidade || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Status: {ex.finalizado ? "Concluído" : "Pendente"}</div>
                                 </div>
- 
+
+                                <label style={styles.alunoCampoLabel}>Carga usada hoje</label>
+                                <input
+                                  style={styles.alunoCargaInput}
+                                  placeholder="Ex.: 20 kg, 15 kg cada lado, peso corporal..."
+                                  value={ex.cargaAtual || ""}
+                                  onChange={(e) =>
+                                    atualizarExercicio(treino, ex.id, "cargaAtual", e.target.value)
+                                  }
+                                />
+
+                                <label style={styles.alunoCampoLabel}>Observações</label>
+                                <textarea
+                                  style={styles.alunoTextarea}
+                                  placeholder="Digite observações do treino. Pode usar Enter para pular linha."
+                                  rows={4}
+                                  value={ex.obsAluno || ""}
+                                  onChange={(e) =>
+                                    atualizarExercicio(treino, ex.id, "obsAluno", e.target.value)
+                                  }
+                                />
+
                                 <h4 style={{ color: "white" }}>Séries</h4>
- 
+
                                 {Array.from(
                                   { length: Number(ex.series) || 0 },
                                   (_, i) => i + 1
@@ -2695,37 +2752,14 @@ export default function App() {
                                     {ex.seriesConcluidas?.includes(s) ? "✓" : "+"} Série {s} / iniciar descanso
                                   </button>
                                 ))}
- 
+
                                 <button
                                   style={styles.alunoBotaoVerde}
                                   onClick={() => finalizarExercicio(treino, ex)}
                                 >
                                   ✓ Finalizar exercício
                                 </button>
- 
-                                <GraficoCarga historico={ex.historicoCargas || []} />
-                              </>
-                            )}
- 
-                            {perfil?.tipo === "professor" && (
-                              <>
-                                <button
-                                  style={styles.success}
-                                  onClick={() => {
-                                    setExercicioAbertoId("");
-                                    alert("Exercício salvo e minimizado!");
-                                  }}
-                                >
-                                  Salvar exercício
-                                </button>
- 
-                                <button
-                                  style={styles.danger}
-                                  onClick={() => excluirExercicio(treino, ex.id)}
-                                >
-                                  Excluir exercício
-                                </button>
- 
+
                                 <GraficoCarga historico={ex.historicoCargas || []} />
                               </>
                             )}
@@ -2851,6 +2885,21 @@ function Field({ label, value, onChange, disabled }: any) {
         style={styles.input}
         disabled={disabled}
         value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function TextAreaField({ label, value, onChange, disabled }: any) {
+  return (
+    <label style={styles.label}>
+      {label}
+      <textarea
+        style={styles.textarea}
+        disabled={disabled}
+        value={value || ""}
+        rows={4}
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
@@ -3238,12 +3287,31 @@ const styles: any = {
   },
   input: {
     width: "100%",
-    padding: 10,
+    padding: 12,
     marginTop: 5,
     marginBottom: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     border: "1px solid #cbd5e1",
     boxSizing: "border-box",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 16,
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 95,
+    padding: 12,
+    marginTop: 5,
+    marginBottom: 10,
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
+    boxSizing: "border-box",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 16,
+    resize: "vertical",
+    whiteSpace: "pre-wrap",
+    fontFamily: "Arial",
   },
   label: { fontWeight: "bold", display: "block" },
   primary: {
@@ -3612,5 +3680,69 @@ const styles: any = {
   },
 /* ===== VISUAL PREMIUM ALUNO - FIM ===== */
  
+  alunoExercicioTituloBotao: {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#ffffff",
+    textAlign: "left",
+  },
+  alunoInfoGridLimpo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+    gap: 12,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  alunoVideoLink: {
+    display: "block",
+    width: "fit-content",
+    padding: "12px 16px",
+    borderRadius: 14,
+    background: "#2563eb",
+    color: "#ffffff",
+    textDecoration: "none",
+    fontWeight: 800,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  alunoCampoLabel: {
+    display: "block",
+    color: "#ffffff",
+    fontWeight: 800,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  alunoTextarea: {
+    width: "100%",
+    minHeight: 110,
+    padding: 16,
+    borderRadius: 18,
+    border: "none",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: 17,
+    marginTop: 8,
+    marginBottom: 18,
+    boxSizing: "border-box",
+    resize: "vertical",
+    whiteSpace: "pre-wrap",
+    fontFamily: "Arial",
+  },
+  alunoObservacaoProfessor: {
+    background: "#0f172a",
+    border: "1px solid #334155",
+    borderRadius: 16,
+    padding: 14,
+    color: "#ffffff",
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  textoQuebraLinha: {
+    whiteSpace: "pre-wrap",
+    marginBottom: 0,
+  },
+
 };
- 
