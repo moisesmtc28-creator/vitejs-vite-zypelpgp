@@ -2679,41 +2679,25 @@ export default function App() {
                             {perfil?.tipo === "aluno" && (
                               <>
                                 {ex.video ? (
-                                  <>
-                                    <a
-                                      href={ex.video}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={styles.alunoVideoLink}
-                                    >
-                                      Abrir vídeo/GIF do exercício
-                                    </a>
-
-                                    <img
-                                      src={ex.video}
-                                      alt={ex.nome || "Exercício"}
-                                      style={styles.alunoImagemExercicio}
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                      }}
-                                    />
-                                  </>
+                                  <a
+                                    href={ex.video}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={styles.alunoVideoLink}
+                                  >
+                                    ▶ Abrir vídeo/GIF do exercício
+                                  </a>
                                 ) : (
                                   <div style={styles.alunoSemGif}>Sem vídeo/GIF disponível</div>
                                 )}
 
-                                {ex.obsProfessor && (
-                                  <div style={styles.alunoObservacaoProfessor}>
-                                    <b>Observação do professor</b>
-                                    <p style={styles.textoQuebraLinha}>{ex.obsProfessor}</p>
-                                  </div>
-                                )}
 
                                 <div style={styles.alunoInfoGridLimpo}>
                                   <div style={styles.alunoInfoPill}>Séries: {ex.series || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Feitas: {(ex.seriesConcluidas || []).length}/{Number(ex.series) || 0}</div>
                                   <div style={styles.alunoInfoPill}>Reps: {ex.repeticoes || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Intervalo: {ex.descanso || "-"}s</div>
+                                  <div style={styles.alunoInfoPill}>Método: {ex.metodo || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Status: {ex.finalizado ? "Concluído" : "Pendente"}</div>
                                 </div>
 
@@ -2773,14 +2757,15 @@ export default function App() {
                     <h3>Mensagens</h3>
  
                     {(treino.mensagens || []).map((m, i) => (
-                      <p key={i}>
+                      <p key={i} style={styles.textoQuebraLinha}>
                         <b>{m.autor}:</b> {m.texto} <small>{m.data}</small>
                       </p>
                     ))}
  
-                    <input
-                      style={styles.input}
-                      placeholder="Mensagem"
+                    <textarea
+                      style={styles.textarea}
+                      placeholder="Mensagem. Pode usar Enter para pular linha."
+                      rows={3}
                       value={mensagem}
                       onChange={(e) => setMensagem(e.target.value)}
                     />
@@ -2896,10 +2881,11 @@ function TextAreaField({ label, value, onChange, disabled }: any) {
     <label style={styles.label}>
       {label}
       <textarea
-        style={styles.textarea}
+        style={disabled ? { ...styles.textarea, background: "#f1f5f9", color: "#334155" } : styles.textarea}
         disabled={disabled}
         value={value || ""}
         rows={4}
+        placeholder="Digite a observação. Pode usar Enter para pular linha."
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
@@ -3299,12 +3285,12 @@ const styles: any = {
   },
   textarea: {
     width: "100%",
-    minHeight: 95,
+    minHeight: 110,
     padding: 12,
     marginTop: 5,
     marginBottom: 10,
     borderRadius: 12,
-    border: "1px solid #cbd5e1",
+    border: "1px solid #94a3b8",
     boxSizing: "border-box",
     background: "#ffffff",
     color: "#111827",
@@ -3603,7 +3589,8 @@ const styles: any = {
     borderRadius: 16,
     padding: "13px 15px",
     fontSize: 16,
-    border: "1px solid rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    lineHeight: 1.35,
   },
   alunoCargaInput: {
     width: "100%",
@@ -3698,15 +3685,18 @@ const styles: any = {
   },
   alunoVideoLink: {
     display: "block",
-    width: "fit-content",
-    padding: "12px 16px",
-    borderRadius: 14,
-    background: "#2563eb",
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "16px 18px",
+    borderRadius: 18,
+    background: "linear-gradient(90deg,#3b82f6,#2563eb)",
     color: "#ffffff",
     textDecoration: "none",
     fontWeight: 800,
+    textAlign: "center",
     marginTop: 12,
-    marginBottom: 12,
+    marginBottom: 14,
+    boxShadow: "0 8px 18px rgba(37,99,235,0.28)",
   },
   alunoCampoLabel: {
     display: "block",
@@ -3717,10 +3707,10 @@ const styles: any = {
   },
   alunoTextarea: {
     width: "100%",
-    minHeight: 110,
+    minHeight: 120,
     padding: 16,
     borderRadius: 18,
-    border: "none",
+    border: "2px solid #93c5fd",
     background: "#ffffff",
     color: "#111827",
     fontSize: 17,
