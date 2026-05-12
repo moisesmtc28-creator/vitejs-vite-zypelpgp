@@ -40,6 +40,18 @@ type Perfil = {
   especialidade?: string;
   cref?: string;
   descricao?: string;
+  ativo?: boolean;
+  plano?: string;
+  licencaTipo?: string;
+  licencaInicio?: string;
+  licencaFim?: string;
+  limiteAlunos?: number;
+  mensalidadeValor?: string;
+  mensalidadePagaEm?: string;
+  observacaoAdmin?: string;
+  aprovadoEm?: string;
+  bloqueadoEm?: string;
+  atualizadoEm?: string;
 };
  
 type ConfigSistema = {
@@ -138,6 +150,50 @@ const ADMIN_EMAILS = [
   "moisesmtc28@gmail.com",
   "moisesthadeu@live.com",
 ].map((email) => email.toLowerCase());
+
+const LICENCAS_ADMIN = [
+  { label: "Vitalícia", valor: "vitalicia", dias: 0 },
+  { label: "30 dias", valor: "30dias", dias: 30 },
+  { label: "60 dias", valor: "60dias", dias: 60 },
+  { label: "90 dias", valor: "90dias", dias: 90 },
+  { label: "120 dias", valor: "120dias", dias: 120 },
+];
+
+function hojeISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function somarDiasISO(dias: number) {
+  const data = new Date();
+  data.setDate(data.getDate() + dias);
+  return data.toISOString().slice(0, 10);
+}
+
+function calcularDiasRestantes(professor: Perfil) {
+  if (professor.licencaTipo === "vitalicia") return 9999;
+  if (!professor.licencaFim) return 9999;
+
+  const hoje = new Date(hojeISO()).getTime();
+  const fim = new Date(professor.licencaFim).getTime();
+  return Math.ceil((fim - hoje) / 86400000);
+}
+
+function licencaProfessorVencida(professor: Perfil) {
+  if (professor.tipo !== "professor") return false;
+  if (professor.status === "bloqueado") return true;
+  if (professor.licencaTipo === "vitalicia") return false;
+  if (!professor.licencaFim) return false;
+  return calcularDiasRestantes(professor) < 0;
+}
+
+function textoLicenca(professor: Perfil) {
+  if (professor.licencaTipo === "vitalicia") return "Vitalícia";
+  if (!professor.licencaFim) return "Sem vencimento definido";
+  const dias = calcularDiasRestantes(professor);
+  if (dias < 0) return `Vencida há ${Math.abs(dias)} dia(s)`;
+  if (dias === 0) return "Vence hoje";
+  return `${dias} dia(s) restantes`;
+}
  
 export default function App() {
   const [usuario, setUsuario] = useState<any>(null);
@@ -311,6 +367,48 @@ export default function App() {
       ),
     [treinosVisiveis]
   );
+
+  const professoresSistema = useMemo(
+    () => usuariosSistema.filter((u) => u.tipo === "professor"),
+    [usuariosSistema]
+  );
+
+  const resumoAdmin = useMemo(() => {
+    const ativos = professoresSistema.filter(
+      (prof) => prof.status === "aprovado" && !licencaProfessorVencida(prof)
+    ).length;
+
+    const bloqueados = professoresSistema.filter(
+      (prof) => prof.status === "bloqueado" || licencaProfessorVencida(prof)
+    ).length;
+
+    const receitaPrevista = professoresSistema.reduce((total, prof) => {
+      const valor = Number(String(prof.mensalidadeValor || "0").replace(",", "."));
+      return total + (isNaN(valor) ? 0 : valor);
+    }, 0);
+
+    const receitaRecebida = professoresSistema.reduce((total, prof) => {
+      if (!prof.mensalidadePagaEm) return total;
+      const valor = Number(String(prof.mensalidadeValor || "0").replace(",", "."));
+      return total + (isNaN(valor) ? 0 : valor);
+    }, 0);
+
+    const vencendo = professoresSistema.filter((prof) => {
+      const dias = calcularDiasRestantes(prof);
+      return prof.licencaTipo !== "vitalicia" && dias >= 0 && dias <= 7;
+    }).length;
+
+    return {
+      professores: professoresSistema.length,
+      ativos,
+      bloqueados,
+      alunos: alunos.length,
+      receitaPrevista,
+      receitaRecebida,
+      receitaPendente: Math.max(receitaPrevista - receitaRecebida, 0),
+      vencendo,
+    };
+  }, [professoresSistema, alunos]);
  
   useEffect(() => {
     if (treinosOrdenados.length === 0) {
@@ -505,8 +603,34 @@ export default function App() {
     if (!confirmar) return;
  
     try {
+      const usuariosSnap = await getDocs(collection(db, "usuarios"));
       const alunosSnap = await getDocs(collection(db, "alunos"));
       const treinosSnap = await getDocs(collection(db, "treinos"));
+
+      await Promise.all(
+        usuariosSnap.docs.map((documento) => {
+          const dados = documento.data() as any;
+
+          if (dados.tipo !== "professor") return Promise.resolve();
+
+          return setDoc(
+            doc(db, "usuarios", documento.id),
+            {
+              ativo: dados.ativo ?? dados.status !== "bloqueado",
+              plano: dados.plano || "Padrão",
+              licencaTipo: dados.licencaTipo || "vitalicia",
+              licencaInicio: dados.licencaInicio || dados.aprovadoEm || hojeISO(),
+              licencaFim: dados.licencaFim || "",
+              limiteAlunos: dados.limiteAlunos || 10,
+              mensalidadeValor: dados.mensalidadeValor || "",
+              mensalidadePagaEm: dados.mensalidadePagaEm || "",
+              observacaoAdmin: dados.observacaoAdmin || "",
+              atualizadoEm: dados.atualizadoEm || new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        })
+      );
  
       await Promise.all(
         alunosSnap.docs.map((documento) => {
@@ -640,6 +764,14 @@ export default function App() {
           tipo: "professor",
           status: "aprovado",
           ativo: true,
+          plano: (professor as any).plano || "Padrão",
+          licencaTipo: (professor as any).licencaTipo || "30dias",
+          licencaInicio: (professor as any).licencaInicio || hojeISO(),
+          licencaFim: (professor as any).licencaFim || somarDiasISO(30),
+          limiteAlunos: (professor as any).limiteAlunos || 10,
+          mensalidadeValor: (professor as any).mensalidadeValor || "",
+          mensalidadePagaEm: (professor as any).mensalidadePagaEm || hojeISO(),
+          observacaoAdmin: (professor as any).observacaoAdmin || "",
           aprovadoEm: new Date().toISOString(),
           atualizadoEm: new Date().toISOString(),
         } as any,
@@ -676,9 +808,145 @@ export default function App() {
       alert("Erro ao bloquear professor.");
     }
   }
+
+  async function liberarProfessor(professor: Perfil) {
+    try {
+      await setDoc(
+        doc(db, "usuarios", professor.uid),
+        {
+          status: "aprovado",
+          ativo: true,
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      alert("Professor liberado.");
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao liberar professor.");
+    }
+  }
+
+  async function renovarLicencaProfessor(professor: Perfil, licencaTipo: string) {
+    const licenca = LICENCAS_ADMIN.find((item) => item.valor === licencaTipo);
+    if (!licenca) return;
+
+    const inicio = hojeISO();
+    const fim = licenca.valor === "vitalicia" ? "" : somarDiasISO(licenca.dias);
+
+    try {
+      await setDoc(
+        doc(db, "usuarios", professor.uid),
+        {
+          status: "aprovado",
+          ativo: true,
+          licencaTipo: licenca.valor,
+          licencaInicio: inicio,
+          licencaFim: fim,
+          mensalidadePagaEm: inicio,
+          atualizadoEm: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      alert(`Licença atualizada para ${licenca.label}.`);
+      carregarTudo();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao renovar licença.");
+    }
+  }
+
+  async function editarLimiteAlunosProfessor(professor: Perfil) {
+    const atual = String(professor.limiteAlunos || 10);
+    const novoLimite = prompt("Digite o limite de alunos deste professor:", atual);
+    if (!novoLimite) return;
+
+    const limite = Number(novoLimite);
+    if (!limite || limite < 1) {
+      alert("Digite um número válido maior que zero.");
+      return;
+    }
+
+    await setDoc(
+      doc(db, "usuarios", professor.uid),
+      { limiteAlunos: limite, atualizadoEm: new Date().toISOString() },
+      { merge: true }
+    );
+
+    alert("Limite de alunos atualizado.");
+    carregarTudo();
+  }
+
+  async function editarValorPlanoProfessor(professor: Perfil) {
+    const novoValor = prompt(
+      "Valor da mensalidade/plano:",
+      professor.mensalidadeValor || "79,90"
+    );
+    if (novoValor === null) return;
+
+    await setDoc(
+      doc(db, "usuarios", professor.uid),
+      { mensalidadeValor: novoValor, atualizadoEm: new Date().toISOString() },
+      { merge: true }
+    );
+
+    alert("Valor atualizado.");
+    carregarTudo();
+  }
+
+  async function editarObservacaoAdminProfessor(professor: Perfil) {
+    const observacao = prompt(
+      "Observação administrativa:",
+      professor.observacaoAdmin || ""
+    );
+    if (observacao === null) return;
+
+    await setDoc(
+      doc(db, "usuarios", professor.uid),
+      { observacaoAdmin: observacao, atualizadoEm: new Date().toISOString() },
+      { merge: true }
+    );
+
+    alert("Observação salva.");
+    carregarTudo();
+  }
+
+  async function marcarPagamentoProfessor(professor: Perfil) {
+    const dataPagamento = prompt("Data do pagamento:", hojeISO());
+    if (!dataPagamento) return;
+
+    await setDoc(
+      doc(db, "usuarios", professor.uid),
+      { mensalidadePagaEm: dataPagamento, atualizadoEm: new Date().toISOString() },
+      { merge: true }
+    );
+
+    alert("Pagamento registrado.");
+    carregarTudo();
+  }
  
   async function cadastrarAluno() {
     if (!usuario) return;
+
+    if (perfil?.tipo === "professor") {
+      if (licencaProfessorVencida(perfil)) {
+        alert("Sua licença está vencida. Entre em contato com o administrador.");
+        return;
+      }
+
+      const limite = Number(perfil.limiteAlunos || 10);
+      const alunosAtivosProfessor = alunos.filter(
+        (aluno) => aluno.professorEmail === usuario.email
+      ).length;
+
+      if (alunosAtivosProfessor >= limite) {
+        alert(`Limite de alunos atingido (${alunosAtivosProfessor}/${limite}).`);
+        return;
+      }
+    }
  
     if (!novoAlunoNome || !novoAlunoEmail.includes("@")) {
       alert("Preencha nome e e-mail válido do aluno.");
@@ -1681,6 +1949,21 @@ export default function App() {
       </Page>
     );
   }
+
+  if (perfil?.tipo === "professor" && licencaProfessorVencida(perfil)) {
+    return (
+      <Page>
+        <Card compacto>
+          <h1 style={styles.center}>EvoTrain</h1>
+          <h2>Licença expirada</h2>
+          <p>Seu acesso está bloqueado porque a licença venceu. Entre em contato com o administrador.</p>
+          <button style={styles.danger} onClick={sair}>
+            Sair
+          </button>
+        </Card>
+      </Page>
+    );
+  }
  
   if (perfil?.status === "bloqueado") {
     return (
@@ -1832,20 +2115,40 @@ export default function App() {
  
       {isAdmin && (
         <Card>
-          <h2>Administração</h2>
-          <p>Aprovar, bloquear e acompanhar professores cadastrados.</p>
- 
+          <h2>Painel administrativo</h2>
+          <p>Gestão de professores, licenças, mensalidades e limites de alunos.</p>
+
           <button style={styles.secondary} onClick={migrarDadosSemPerder}>
             Atualizar estrutura sem apagar dados
           </button>
- 
+
           <p style={{ fontSize: 13, color: "#475569" }}>
-            Use este botão depois de atualizar. Ele preserva alunos, treinos, cargas, mensagens e avaliações antigas.
+            Use este botão uma vez após atualizar. Ele preserva professores, alunos, treinos, cargas, mensagens e avaliações antigas.
           </p>
- 
+
+          <div style={styles.adminDashboard}>
+            <AdminStat titulo="Professores" valor={resumoAdmin.professores} />
+            <AdminStat titulo="Ativos" valor={resumoAdmin.ativos} />
+            <AdminStat titulo="Bloqueados" valor={resumoAdmin.bloqueados} />
+            <AdminStat titulo="Alunos" valor={resumoAdmin.alunos} />
+            <AdminStat titulo="Vencendo" valor={resumoAdmin.vencendo} />
+            <AdminStat
+              titulo="Receita prevista"
+              valor={`R$ ${resumoAdmin.receitaPrevista.toFixed(2)}`}
+            />
+            <AdminStat
+              titulo="Recebido"
+              valor={`R$ ${resumoAdmin.receitaRecebida.toFixed(2)}`}
+            />
+            <AdminStat
+              titulo="Pendente"
+              valor={`R$ ${resumoAdmin.receitaPendente.toFixed(2)}`}
+            />
+          </div>
+
           <div style={styles.configBox}>
             <h3>Contato da tela inicial</h3>
- 
+
             <label style={styles.label}>Texto</label>
             <input
               style={styles.input}
@@ -1857,7 +2160,7 @@ export default function App() {
                 })
               }
             />
- 
+
             <label style={styles.label}>WhatsApp</label>
             <input
               style={styles.input}
@@ -1869,7 +2172,7 @@ export default function App() {
                 })
               }
             />
- 
+
             <label style={styles.label}>E-mail</label>
             <input
               style={styles.input}
@@ -1881,62 +2184,126 @@ export default function App() {
                 })
               }
             />
- 
+
             <button style={styles.primary} onClick={salvarConfigSistema}>
               Salvar contato
             </button>
           </div>
- 
-          <h3>Professores pendentes</h3>
- 
-          {usuariosSistema.filter(
-            (u) => u.tipo === "professor" && u.status === "pendente"
-          ).length === 0 && <p>Nenhuma solicitação pendente.</p>}
- 
-          {usuariosSistema
-            .filter((u) => u.tipo === "professor" && u.status === "pendente")
-            .map((professor) => (
-              <div key={professor.uid} style={styles.alunoCardGerenciar}>
-                <b>{professor.nome || professor.email}</b>
-                <br />
-                <small>{professor.email}</small>
-                <br />
- 
-                <button
-                  style={styles.success}
-                  onClick={() => aprovarProfessor(professor)}
-                >
-                  Aprovar professor
-                </button>
- 
-                <button
-                  style={styles.danger}
-                  onClick={() => bloquearProfessor(professor)}
-                >
-                  Bloquear
-                </button>
-              </div>
-            ))}
- 
-          <h3>Professores aprovados/bloqueados</h3>
- 
-          {usuariosSistema
-            .filter((u) => u.tipo === "professor" && u.status !== "pendente")
-            .map((professor) => (
-              <div key={professor.uid} style={styles.alunoCardGerenciar}>
-                <b>{professor.nome || professor.email}</b>
-                <br />
-                <small>{professor.email}</small>
-                <p>Status: {professor.status || "aprovado"}</p>
- 
-                <button
-                  style={styles.danger}
-                  onClick={() => bloquearProfessor(professor)}
-                >
-                  Bloquear
-                </button>
-              </div>
-            ))}
+
+          <h3>Professores cadastrados</h3>
+
+          {professoresSistema.length === 0 && <p>Nenhum professor cadastrado.</p>}
+
+          <div style={styles.professoresAdminGrid}>
+            {professoresSistema.map((professor) => {
+              const alunosProfessor = alunos.filter(
+                (aluno) =>
+                  String(aluno.professorEmail || "").toLowerCase() ===
+                  String(professor.email || "").toLowerCase()
+              );
+
+              const limite = Number(professor.limiteAlunos || 10);
+              const dias = calcularDiasRestantes(professor);
+              const vencida = licencaProfessorVencida(professor);
+              const aprovado = professor.status === "aprovado" && !vencida;
+              const pendente = professor.status === "pendente";
+
+              return (
+                <div key={professor.uid} style={styles.professorAdminCard}>
+                  <div style={styles.professorAdminTopo}>
+                    <div>
+                      <h3 style={{ margin: 0 }}>{professor.nome || professor.email}</h3>
+                      <small>{professor.email}</small>
+                    </div>
+
+                    <span
+                      style={{
+                        ...styles.statusBadge,
+                        background: pendente
+                          ? "#f59e0b"
+                          : aprovado
+                          ? "#16a34a"
+                          : "#dc2626",
+                      }}
+                    >
+                      {pendente ? "Pendente" : aprovado ? "Ativo" : "Bloqueado"}
+                    </span>
+                  </div>
+
+                  <div style={styles.adminInfoGrid}>
+                    <InfoBox label="Alunos" value={`${alunosProfessor.length}/${limite}`} />
+                    <InfoBox label="Licença" value={professor.licencaTipo === "vitalicia" ? "Vitalícia" : textoLicenca(professor)} />
+                    <InfoBox label="Último pagamento" value={professor.mensalidadePagaEm || "Não informado"} />
+                    <InfoBox label="Mensalidade" value={professor.mensalidadeValor ? `R$ ${professor.mensalidadeValor}` : "Não informado"} />
+                  </div>
+
+                  {professor.licencaTipo !== "vitalicia" && (
+                    <p style={{ color: dias < 0 ? "#dc2626" : dias <= 7 ? "#b45309" : "#166534" }}>
+                      <b>Status da licença:</b> {textoLicenca(professor)}
+                    </p>
+                  )}
+
+                  {professor.observacaoAdmin && (
+                    <p style={styles.obsAdminBox}>
+                      <b>Obs. ADM:</b> {professor.observacaoAdmin}
+                    </p>
+                  )}
+
+                  <label style={styles.label}>Renovar licença</label>
+                  <select
+                    style={styles.input}
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      renovarLicencaProfessor(professor, e.target.value);
+                      e.currentTarget.value = "";
+                    }}
+                  >
+                    <option value="">Escolha o período</option>
+                    {LICENCAS_ADMIN.map((licenca) => (
+                      <option key={licenca.valor} value={licenca.valor}>
+                        {licenca.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={styles.adminButtonGrid}>
+                    {pendente && (
+                      <button style={styles.success} onClick={() => aprovarProfessor(professor)}>
+                        Aprovar
+                      </button>
+                    )}
+
+                    {!aprovado && !pendente && (
+                      <button style={styles.success} onClick={() => liberarProfessor(professor)}>
+                        Liberar
+                      </button>
+                    )}
+
+                    <button style={styles.secondary} onClick={() => editarLimiteAlunosProfessor(professor)}>
+                      Limite alunos
+                    </button>
+
+                    <button style={styles.secondary} onClick={() => editarValorPlanoProfessor(professor)}>
+                      Valor plano
+                    </button>
+
+                    <button style={styles.secondary} onClick={() => marcarPagamentoProfessor(professor)}>
+                      Marcar pagamento
+                    </button>
+
+                    <button style={styles.secondary} onClick={() => editarObservacaoAdminProfessor(professor)}>
+                      Obs. ADM
+                    </button>
+
+                    <button style={styles.danger} onClick={() => bloquearProfessor(professor)}>
+                      Bloquear
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Card>
       )}
  
@@ -2679,25 +3046,41 @@ export default function App() {
                             {perfil?.tipo === "aluno" && (
                               <>
                                 {ex.video ? (
-                                  <a
-                                    href={ex.video}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={styles.alunoVideoLink}
-                                  >
-                                    ▶ Abrir vídeo/GIF do exercício
-                                  </a>
+                                  <>
+                                    <a
+                                      href={ex.video}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={styles.alunoVideoLink}
+                                    >
+                                      Abrir vídeo/GIF do exercício
+                                    </a>
+
+                                    <img
+                                      src={ex.video}
+                                      alt={ex.nome || "Exercício"}
+                                      style={styles.alunoImagemExercicio}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                      }}
+                                    />
+                                  </>
                                 ) : (
                                   <div style={styles.alunoSemGif}>Sem vídeo/GIF disponível</div>
                                 )}
 
+                                {ex.obsProfessor && (
+                                  <div style={styles.alunoObservacaoProfessor}>
+                                    <b>Observação do professor</b>
+                                    <p style={styles.textoQuebraLinha}>{ex.obsProfessor}</p>
+                                  </div>
+                                )}
 
                                 <div style={styles.alunoInfoGridLimpo}>
                                   <div style={styles.alunoInfoPill}>Séries: {ex.series || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Feitas: {(ex.seriesConcluidas || []).length}/{Number(ex.series) || 0}</div>
                                   <div style={styles.alunoInfoPill}>Reps: {ex.repeticoes || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Intervalo: {ex.descanso || "-"}s</div>
-                                  <div style={styles.alunoInfoPill}>Método: {ex.metodo || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Status: {ex.finalizado ? "Concluído" : "Pendente"}</div>
                                 </div>
 
@@ -2757,15 +3140,14 @@ export default function App() {
                     <h3>Mensagens</h3>
  
                     {(treino.mensagens || []).map((m, i) => (
-                      <p key={i} style={styles.textoQuebraLinha}>
+                      <p key={i}>
                         <b>{m.autor}:</b> {m.texto} <small>{m.data}</small>
                       </p>
                     ))}
  
-                    <textarea
-                      style={styles.textarea}
-                      placeholder="Mensagem. Pode usar Enter para pular linha."
-                      rows={3}
+                    <input
+                      style={styles.input}
+                      placeholder="Mensagem"
                       value={mensagem}
                       onChange={(e) => setMensagem(e.target.value)}
                     />
@@ -2881,11 +3263,10 @@ function TextAreaField({ label, value, onChange, disabled }: any) {
     <label style={styles.label}>
       {label}
       <textarea
-        style={disabled ? { ...styles.textarea, background: "#f1f5f9", color: "#334155" } : styles.textarea}
+        style={styles.textarea}
         disabled={disabled}
         value={value || ""}
         rows={4}
-        placeholder="Digite a observação. Pode usar Enter para pular linha."
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
@@ -3285,12 +3666,12 @@ const styles: any = {
   },
   textarea: {
     width: "100%",
-    minHeight: 110,
+    minHeight: 95,
     padding: 12,
     marginTop: 5,
     marginBottom: 10,
     borderRadius: 12,
-    border: "1px solid #94a3b8",
+    border: "1px solid #cbd5e1",
     boxSizing: "border-box",
     background: "#ffffff",
     color: "#111827",
@@ -3589,8 +3970,7 @@ const styles: any = {
     borderRadius: 16,
     padding: "13px 15px",
     fontSize: 16,
-    border: "1px solid rgba(255,255,255,0.18)",
-    lineHeight: 1.35,
+    border: "1px solid rgba(255,255,255,0.06)",
   },
   alunoCargaInput: {
     width: "100%",
@@ -3685,18 +4065,15 @@ const styles: any = {
   },
   alunoVideoLink: {
     display: "block",
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "16px 18px",
-    borderRadius: 18,
-    background: "linear-gradient(90deg,#3b82f6,#2563eb)",
+    width: "fit-content",
+    padding: "12px 16px",
+    borderRadius: 14,
+    background: "#2563eb",
     color: "#ffffff",
     textDecoration: "none",
     fontWeight: 800,
-    textAlign: "center",
     marginTop: 12,
-    marginBottom: 14,
-    boxShadow: "0 8px 18px rgba(37,99,235,0.28)",
+    marginBottom: 12,
   },
   alunoCampoLabel: {
     display: "block",
@@ -3707,10 +4084,10 @@ const styles: any = {
   },
   alunoTextarea: {
     width: "100%",
-    minHeight: 120,
+    minHeight: 110,
     padding: 16,
     borderRadius: 18,
-    border: "2px solid #93c5fd",
+    border: "none",
     background: "#ffffff",
     color: "#111827",
     fontSize: 17,
@@ -3735,6 +4112,70 @@ const styles: any = {
     marginBottom: 0,
   },
 
+  adminDashboard: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+    gap: 12,
+    margin: "18px 0",
+  },
+  adminStatCard: {
+    background: "#0f172a",
+    color: "white",
+    borderRadius: 16,
+    padding: 16,
+    boxShadow: "0 8px 18px rgba(15,23,42,.22)",
+  },
+  adminStatValor: {
+    fontSize: 24,
+    fontWeight: 800,
+    marginTop: 6,
+  },
+  professoresAdminGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+    gap: 16,
+    marginTop: 16,
+  },
+  professorAdminCard: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    borderRadius: 18,
+    padding: 16,
+    boxShadow: "0 8px 18px rgba(15,23,42,.10)",
+  },
+  professorAdminTopo: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  statusBadge: {
+    color: "white",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
+  adminInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
+    gap: 10,
+    margin: "12px 0",
+  },
+  obsAdminBox: {
+    background: "#e0f2fe",
+    border: "1px solid #7dd3fc",
+    borderRadius: 12,
+    padding: 10,
+    whiteSpace: "pre-wrap",
+  },
+  adminButtonGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
+    gap: 8,
+    marginTop: 12,
+  },
 };
-
 
