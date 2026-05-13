@@ -128,6 +128,12 @@ type Treino = {
   exercicios: Exercicio[];
   mensagens: { texto: string; autor: string; data: string }[];
   criadoEm?: any;
+  atualizadoEm?: any;
+  treinoFinalizado?: boolean;
+  treinoFinalizadoEm?: string;
+  percentualConcluido?: number;
+  exerciciosPulados?: string[];
+  reiniciadoEm?: string;
 };
  
 type TreinoModelo = {
@@ -662,6 +668,9 @@ export default function App() {
               versaoFicha: dados.versaoFicha || 2,
               exercicios: dados.exercicios || [],
               mensagens: dados.mensagens || [],
+              treinoFinalizado: dados.treinoFinalizado || false,
+              percentualConcluido: dados.percentualConcluido || 0,
+              exerciciosPulados: dados.exerciciosPulados || [],
               atualizadoEm: dados.atualizadoEm || new Date().toISOString(),
             },
             { merge: true }
@@ -1562,8 +1571,110 @@ export default function App() {
       seriesConcluidas: [],
       cargaAtual: e.ultimaCarga || "",
     }));
- 
-    await salvarExercicios(treino, exercicios);
+
+    await setDoc(
+      doc(db, "treinos", treino.id),
+      {
+        exercicios,
+        treinoFinalizado: false,
+        treinoFinalizadoEm: "",
+        percentualConcluido: 0,
+        exerciciosPulados: [],
+        reiniciadoEm: new Date().toISOString(),
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    setTreinos((prev) =>
+      prev.map((t) =>
+        t.id === treino.id
+          ? {
+              ...t,
+              exercicios,
+              treinoFinalizado: false,
+              treinoFinalizadoEm: "",
+              percentualConcluido: 0,
+              exerciciosPulados: [],
+            }
+          : t
+      )
+    );
+
+    carregarTudo();
+  }
+
+  async function abrirTreinoOuReiniciar(treino: Treino) {
+    if (treino.treinoFinalizado) {
+      const confirmar = confirm(
+        `O treino ${treino.nome} já foi finalizado com ${Math.round(treino.percentualConcluido || calcularProgresso(treino))}%. Deseja reiniciar este treino agora?`
+      );
+
+      if (confirmar) {
+        await reiniciarTreino(treino);
+      }
+    }
+
+    setTreinoAbertoId(treino.id);
+  }
+
+  async function finalizarTreinoCompleto(treino: Treino) {
+    const exercicios = treino.exercicios || [];
+    const total = exercicios.length;
+    const concluidos = exercicios.filter((exercicio) => exercicio.finalizado).length;
+    const percentual = total ? Math.round((concluidos / total) * 100) : 0;
+    const pulados = exercicios
+      .filter((exercicio) => !exercicio.finalizado)
+      .map((exercicio) => exercicio.nome || "Exercício sem nome");
+
+    const confirmar = confirm(
+      `Finalizar treino com ${percentual}% concluído?\nExercícios pulados: ${pulados.length}`
+    );
+
+    if (!confirmar) return;
+
+    await setDoc(
+      doc(db, "treinos", treino.id),
+      {
+        treinoFinalizado: true,
+        treinoFinalizadoEm: new Date().toISOString(),
+        percentualConcluido: percentual,
+        exerciciosPulados: pulados,
+        atualizadoEm: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    setTreinos((prev) =>
+      prev.map((t) =>
+        t.id === treino.id
+          ? {
+              ...t,
+              treinoFinalizado: true,
+              treinoFinalizadoEm: new Date().toISOString(),
+              percentualConcluido: percentual,
+              exerciciosPulados: pulados,
+            }
+          : t
+      )
+    );
+
+    alert(`Treino finalizado com ${percentual}% concluído.`);
+    carregarTudo();
+  }
+
+  async function reiniciarSemanaAluno() {
+    const confirmar = confirm(
+      "Deseja reiniciar todos os treinos visíveis? Use isso no início de uma nova semana."
+    );
+
+    if (!confirmar) return;
+
+    for (const treino of treinosOrdenados) {
+      await reiniciarTreino(treino);
+    }
+
+    alert("Semana reiniciada. Todos os treinos visíveis foram liberados novamente.");
   }
  
   async function enviarMensagem(treino: Treino) {
@@ -1621,6 +1732,10 @@ export default function App() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     oscillator.start(ctx.currentTime);
     oscillator.stop(ctx.currentTime + 0.55);
+
+    if (navigator.vibrate) {
+      navigator.vibrate([250, 120, 250]);
+    }
   }
  
   async function moverExercicio(treino: Treino, destinoId: string) {
@@ -1743,7 +1858,9 @@ export default function App() {
         data: treino.dataTreino || "Sem data",
         tipo: "Treino",
         titulo: treino.nome,
-        detalhe: `${(treino.exercicios || []).filter((e) => e.finalizado).length}/${(treino.exercicios || []).length} exercícios concluídos`,
+        detalhe: treino.treinoFinalizado
+          ? `${Math.round(treino.percentualConcluido || 0)}% concluído | Pulados: ${(treino.exerciciosPulados || []).length}`
+          : `${(treino.exercicios || []).filter((e) => e.finalizado).length}/${(treino.exercicios || []).length} exercícios concluídos`,
       })),
       ...cargas.map((item) => ({
         data: item.data,
@@ -2028,9 +2145,21 @@ export default function App() {
       </div>
  
       {timerAtivo && (
-        <div style={styles.timerFixo}>
-          <b>{timerInfo}</b> - {formatarTempo(tempoRestante)}
-          <button style={styles.secondary} onClick={() => setTimerAtivo(false)}>
+        <div
+          style={{
+            ...styles.timerFixo,
+            background:
+              tempoRestante <= 10
+                ? "linear-gradient(135deg,#ef4444,#991b1b)"
+                : tempoRestante <= 20
+                  ? "linear-gradient(135deg,#f59e0b,#b45309)"
+                  : "linear-gradient(135deg,#2563eb,#1d4ed8)",
+          }}
+        >
+          <span style={styles.timerInfoTexto}>{timerInfo}</span>
+          <strong style={styles.timerNumero}>{formatarTempo(tempoRestante)}</strong>
+          <small>{tempoRestante <= 10 ? "Prepare-se!" : "Descanso em andamento"}</small>
+          <button style={styles.timerFechar} onClick={() => setTimerAtivo(false)}>
             Fechar
           </button>
         </div>
@@ -2671,9 +2800,9 @@ export default function App() {
                 <button
                   key={t.id}
                   style={treinoAbertoId === t.id ? styles.tabAtiva : styles.tab}
-                  onClick={() => setTreinoAbertoId(t.id)}
+                  onClick={() => abrirTreinoOuReiniciar(t)}
                 >
-                  {t.nome} - {Math.round(progresso)}%
+                  {t.nome} - {t.treinoFinalizado ? "Finalizado" : `${Math.round(progresso)}%`}
                 </button>
               );
             })}
@@ -3053,20 +3182,13 @@ export default function App() {
                                       rel="noreferrer"
                                       style={styles.alunoVideoLink}
                                     >
-                                      Abrir vídeo/GIF do exercício
+                                      ▶ Abrir vídeo de execução
                                     </a>
 
-                                    <img
-                                      src={ex.video}
-                                      alt={ex.nome || "Exercício"}
-                                      style={styles.alunoImagemExercicio}
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                      }}
-                                    />
+
                                   </>
                                 ) : (
-                                  <div style={styles.alunoSemGif}>Sem vídeo/GIF disponível</div>
+                                  <div style={styles.alunoSemGif}>Sem link de vídeo disponível</div>
                                 )}
 
                                 {ex.obsProfessor && (
@@ -3081,6 +3203,7 @@ export default function App() {
                                   <div style={styles.alunoInfoPill}>Feitas: {(ex.seriesConcluidas || []).length}/{Number(ex.series) || 0}</div>
                                   <div style={styles.alunoInfoPill}>Reps: {ex.repeticoes || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Intervalo: {ex.descanso || "-"}s</div>
+                                  <div style={styles.alunoInfoPill}>Método: {ex.metodo || "-"}</div>
                                   <div style={styles.alunoInfoPill}>Status: {ex.finalizado ? "Concluído" : "Pendente"}</div>
                                 </div>
 
@@ -3136,6 +3259,41 @@ export default function App() {
                     );
                   })}
  
+                  <div style={styles.finalizarTreinoBox}>
+                    {treino.treinoFinalizado ? (
+                      <div style={styles.treinoFinalizadoAviso}>
+                        <b>Treino finalizado</b>
+                        <p>Conclusão registrada: {Math.round(treino.percentualConcluido || progresso)}%</p>
+                        {(treino.exerciciosPulados || []).length > 0 && (
+                          <p>Exercícios pulados: {(treino.exerciciosPulados || []).join(", ")}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        style={styles.botaoFinalizarTreino}
+                        onClick={() => finalizarTreinoCompleto(treino)}
+                      >
+                        ✓ Finalizar treino
+                      </button>
+                    )}
+
+                    <button
+                      style={styles.botaoReiniciarTreino}
+                      onClick={() => reiniciarTreino(treino)}
+                    >
+                      ↺ Reiniciar este treino
+                    </button>
+
+                    {perfil?.tipo === "aluno" && treinosOrdenados.length > 1 && (
+                      <button
+                        style={styles.botaoReiniciarSemana}
+                        onClick={reiniciarSemanaAluno}
+                      >
+                        ↺ Reiniciar semana
+                      </button>
+                    )}
+                  </div>
+
                   <div style={styles.messages}>
                     <h3>Mensagens</h3>
  
@@ -3568,7 +3726,42 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
   );
 }
  
+function AdminStat({ titulo, valor }: { titulo: string; valor: any }) {
+  return (
+    <div style={styles.adminStat}>
+      <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>{titulo}</div>
+      <strong style={{ fontSize: 22, color: "#0f172a" }}>{valor}</strong>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={styles.infoBox}>
+      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>{label}</div>
+      <strong style={{ color: "#ffffff" }}>{value}</strong>
+    </div>
+  );
+}
+
+
 const styles: any = {
+  adminStat: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    borderRadius: 14,
+    padding: 14,
+    textAlign: "center",
+    boxShadow: "0 4px 14px rgba(15,23,42,.08)",
+  },
+  infoBox: {
+    background: "#0f172a",
+    color: "#fff",
+    borderRadius: 14,
+    padding: 12,
+    textAlign: "center",
+    border: "1px solid #334155",
+  },
   page: {
     minHeight: "100vh",
     background: "linear-gradient(135deg,#0f172a,#1e293b)",
@@ -4177,5 +4370,77 @@ const styles: any = {
     gap: 8,
     marginTop: 12,
   },
+  timerNumero: {
+    fontSize: 56,
+    fontWeight: 900,
+    lineHeight: 1,
+    letterSpacing: 1,
+  },
+  timerInfoTexto: {
+    fontSize: 15,
+    fontWeight: 800,
+    textAlign: "center",
+  },
+  timerFechar: {
+    border: "none",
+    borderRadius: 12,
+    padding: "10px 14px",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  finalizarTreinoBox: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 20,
+    background: "#0f172a",
+    border: "1px solid #334155",
+  },
+  botaoFinalizarTreino: {
+    width: "100%",
+    background: "linear-gradient(135deg,#22c55e,#16a34a)",
+    color: "#ffffff",
+    border: "none",
+    padding: 18,
+    borderRadius: 18,
+    fontSize: 18,
+    fontWeight: 900,
+    cursor: "pointer",
+    marginTop: 8,
+  },
+  botaoReiniciarTreino: {
+    width: "100%",
+    background: "linear-gradient(135deg,#f59e0b,#d97706)",
+    color: "#ffffff",
+    border: "none",
+    padding: 16,
+    borderRadius: 18,
+    fontSize: 17,
+    fontWeight: 900,
+    cursor: "pointer",
+    marginTop: 12,
+  },
+  botaoReiniciarSemana: {
+    width: "100%",
+    background: "linear-gradient(135deg,#8b5cf6,#6d28d9)",
+    color: "#ffffff",
+    border: "none",
+    padding: 16,
+    borderRadius: 18,
+    fontSize: 17,
+    fontWeight: 900,
+    cursor: "pointer",
+    marginTop: 12,
+  },
+  treinoFinalizadoAviso: {
+    background: "linear-gradient(135deg,#064e3b,#14532d)",
+    color: "white",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+  },
+
 };
 
