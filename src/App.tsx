@@ -3647,7 +3647,27 @@ function MiniGrafico({ titulo, dados, campo, sufixo }: any) {
     </div>
   );
 }
- 
+ function AdminStat({ titulo, valor }: { titulo: string; valor: any }) {
+  return (
+    <div style={styles.adminStat}>
+      <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
+        {titulo}
+      </div>
+      <strong style={{ fontSize: 22, color: "#0f172a" }}>{valor}</strong>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={styles.infoBox}>
+      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>
+        {label}
+      </div>
+      <strong style={{ color: "#ffffff" }}>{value}</strong>
+    </div>
+  );
+}
 const styles: any = {
   page: {
     minHeight: "100vh",
